@@ -1,0 +1,61 @@
+# Default values for dev-portal Helm Chart.
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/know-book/dev-portal/app
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+nginxImage:
+  repository: ghcr.io/know-book/dev-portal/nginx
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-cloudflare"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  host: dev-portal.example.com
+  tlsSecretName: dev-portal-tls
+
+vault:
+  enabled: true
+  server: "https://vault.example.com"
+  secretPath: "dev-portal/app"
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2048Mi
+  requests:
+    cpu: 100m
+    memory: 512Mi
+
+horizon:
+  enabled: true
+  replicas: 1
+
+worker:
+  enabled: true
+  replicas: 2
+
+scheduler:
+  enabled: true
+  schedule: "* * * * *"
+
+redis:
+  enabled: true
+
+postgresql:
+  enabled: true
+  storage: 5Gi

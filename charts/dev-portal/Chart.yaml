@@ -1,0 +1,14 @@
+apiVersion: v2
+name: dev-portal
+description: A Helm chart for Kubernetes-native Vercel Alternative (Dev Portal)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - vercel-alternative
+  - dev-portal
+  - kubernetes
+  - laravel
+  - gitops
+maintainers:
+  - name: know-book
