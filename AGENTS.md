@@ -1,6 +1,18 @@
 <laravel-boost-guidelines>
 === foundation rules ===
 
+## Project Context & Plan
+
+- **IMPORTANT**: Before performing any tasks, feature development, or architectural design in this codebase, you MUST read [PLAN.md](file:///Users/hsuan/Projects/dev-portal/PLAN.md) to understand the overall project architecture, goals (Kubernetes-native Vercel alternative for Laravel & Next.js), GitHub App integration, ArgoCD sync, HashiCorp Vault .env management, and pure UI manifest management.
+
+## Component Naming & Design System Guidelines
+
+- **NO EMOJIS IN FILENAMES**: Do NOT use emojis (e.g. `⚡`) in any Livewire component filenames. Always use standard filenames like `index.blade.php`, `show.blade.php`, `edit.blade.php`.
+- **VMware Clarity UI Style**: Apply VMware Clarity / Enterprise UI design aesthetics across all UI components (clean slate/blue enterprise color palette, crisp borders, enterprise status indicators, clear typography, compact metric cards).
+
+
+
+
 # Laravel Boost Guidelines
 
 The Laravel Boost guidelines are specifically curated by Laravel maintainers for this application. These guidelines should be followed closely to ensure the best experience when building Laravel applications.
