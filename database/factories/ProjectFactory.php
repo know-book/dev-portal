@@ -20,15 +20,15 @@ class ProjectFactory extends Factory
      */
     public function definition(): array
     {
-        $name = $this->faker->unique()->words(2, true);
+        $name = $this->faker?->words(2, true) ?? 'project-'.Str::random(4);
 
         return [
             'team_id' => Team::factory(),
             'name' => ucfirst($name),
             'slug' => Str::slug($name),
-            'framework' => $this->faker->randomElement([ProjectFramework::Laravel, ProjectFramework::NextJs, ProjectFramework::Other]),
-            'repository' => $this->faker->userName().'/'.Str::slug($name),
-            'description' => $this->faker->sentence(),
+            'framework' => $this->faker?->randomElement([ProjectFramework::Laravel, ProjectFramework::NextJs, ProjectFramework::Other]) ?? ProjectFramework::Laravel,
+            'repository' => ($this->faker?->userName() ?? 'org').'/'.Str::slug($name),
+            'description' => $this->faker?->sentence() ?? 'Project description',
         ];
     }
 

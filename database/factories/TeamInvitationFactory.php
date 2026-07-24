@@ -7,6 +7,7 @@ use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Str;
 
 /**
  * @extends Factory<TeamInvitation>
@@ -22,7 +23,7 @@ class TeamInvitationFactory extends Factory
     {
         return [
             'team_id' => Team::factory(),
-            'email' => $this->faker->unique()->safeEmail(),
+            'email' => $this->faker?->unique()->safeEmail() ?? 'invite_'.Str::random(6).'@example.com',
             'role' => TeamRole::Member,
             'invited_by' => User::factory(),
             'expires_at' => null,

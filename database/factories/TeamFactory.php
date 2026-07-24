@@ -18,7 +18,7 @@ class TeamFactory extends Factory
      */
     public function definition(): array
     {
-        $name = $this->faker->unique()->company();
+        $name = $this->faker?->company() ?? 'Team '.Str::random(5);
 
         return [
             'name' => $name,
