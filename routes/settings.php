@@ -24,6 +24,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         )
         ->name('security.edit');
 
+    Route::livewire('settings/github', 'pages::settings.github')->name('settings.github');
+
     Route::livewire('settings/teams', 'pages::teams.index')->name('teams.index');
 
     Route::middleware(EnsureTeamMembership::class)->group(function () {

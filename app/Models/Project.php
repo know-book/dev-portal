@@ -15,17 +15,22 @@ use Illuminate\Support\Str;
 /**
  * @property int $id
  * @property int $team_id
+ * @property int|null $github_installation_id
  * @property string $name
  * @property string $slug
  * @property ProjectFramework $framework
  * @property string|null $repository
+ * @property string|null $repository_id
+ * @property string $default_branch
+ * @property bool $auto_deploy
  * @property string|null $description
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
  * @property-read Team $team
+ * @property-read GitHubInstallation|null $githubInstallation
  */
-#[Fillable(['team_id', 'name', 'slug', 'framework', 'repository', 'description'])]
+#[Fillable(['team_id', 'github_installation_id', 'name', 'slug', 'framework', 'repository', 'repository_id', 'default_branch', 'auto_deploy', 'description'])]
 class Project extends Model
 {
     /** @use HasFactory<ProjectFactory> */
@@ -102,6 +107,16 @@ class Project extends Model
     }
 
     /**
+     * Get the GitHub installation for this project.
+     *
+     * @return BelongsTo<GitHubInstallation, $this>
+     */
+    public function githubInstallation(): BelongsTo
+    {
+        return $this->belongsTo(GitHubInstallation::class, 'github_installation_id');
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -110,6 +125,7 @@ class Project extends Model
     {
         return [
             'framework' => ProjectFramework::class,
+            'auto_deploy' => 'boolean',
         ];
     }
 

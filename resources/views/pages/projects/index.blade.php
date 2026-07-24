@@ -2,6 +2,7 @@
 
 use App\Enums\ProjectFramework;
 use App\Models\Project;
+use App\Services\GitHub\GitHubAppService;
 use Flux\Flux;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -15,6 +16,8 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
     public string $name = '';
 
     public string $framework = 'laravel';
+
+    public string $selectedInstallationId = '';
 
     public string $repository = '';
 
@@ -31,16 +34,19 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
             'description' => ['nullable', 'string', 'max:1000'],
         ]);
 
+        $installationId = $this->selectedInstallationId ? (int) $this->selectedInstallationId : null;
+
         $project = $team->projects()->create([
             'name' => $validated['name'],
             'framework' => $validated['framework'],
+            'github_installation_id' => $installationId,
             'repository' => $validated['repository'] ?: null,
             'description' => $validated['description'] ?: null,
         ]);
 
         $this->dispatch('close-modal', name: 'create-project');
 
-        $this->reset(['name', 'framework', 'repository', 'description']);
+        $this->reset(['name', 'framework', 'selectedInstallationId', 'repository', 'description']);
 
         Flux::toast(variant: 'success', text: __('Project ":name" created.', ['name' => $project->name]));
     }
@@ -64,6 +70,15 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
     public function projects(): Collection
     {
         return Auth::user()->currentTeam?->projects()->latest()->get() ?? collect();
+    }
+
+    /**
+     * @return Collection<int, \App\Models\GitHubInstallation>
+     */
+    #[Computed]
+    public function gitHubInstallations(): Collection
+    {
+        return Auth::user()->currentTeam?->githubInstallations()->get() ?? collect();
     }
 }; ?>
 
@@ -170,7 +185,7 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
         @endforelse
     </div>
 
-    <!-- Modals (Positioned outside CSS Grid container to avoid grid-item spacing bug) -->
+    <!-- Modals (Positioned outside CSS Grid container) -->
     @foreach ($this->projects as $project)
         <flux:modal name="delete-project-{{ $project->id }}" focusable class="max-w-md">
             <form wire:submit="deleteProject({{ $project->id }})" class="space-y-6">
@@ -216,8 +231,20 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
                 <flux:error name="framework" />
             </flux:field>
 
+            @if ($this->gitHubInstallations->isNotEmpty())
+                <flux:field>
+                    <flux:label>{{ __('GitHub Account / Organization') }}</flux:label>
+                    <flux:select wire:model="selectedInstallationId">
+                        <flux:select.option value="">{{ __('Select GitHub Installation') }}</flux:select.option>
+                        @foreach ($this->gitHubInstallations as $installation)
+                            <flux:select.option value="{{ $installation->id }}">{{ $installation->account_name }} ({{ $installation->account_type }})</flux:select.option>
+                        @endforeach
+                    </flux:select>
+                </flux:field>
+            @endif
+
             <flux:field>
-                <flux:label>{{ __('Git Repository (Optional)') }}</flux:label>
+                <flux:label>{{ __('Git Repository') }}</flux:label>
                 <flux:input wire:model="repository" type="text" placeholder="org/repo" data-test="project-repo-input" />
                 <flux:error name="repository" />
             </flux:field>

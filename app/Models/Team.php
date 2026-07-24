@@ -105,6 +105,15 @@ class Team extends Model
         return $this->hasMany(Project::class);
     }
 
+    /**
+     * Get all GitHub installations for this team.
+     *
+     * @return HasMany<GitHubInstallation, $this>
+     */
+    public function githubInstallations(): HasMany
+    {
+        return $this->hasMany(GitHubInstallation::class);
+    }
 
     /**
      * Get the attributes that should be cast.

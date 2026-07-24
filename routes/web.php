@@ -1,11 +1,18 @@
 <?php
 
+use App\Http\Controllers\GitHubWebhookController;
 use App\Http\Middleware\EnsureTeamMembership;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome')->name('home');
 
+Route::post('/api/webhooks/github', GitHubWebhookController::class)
+    ->withoutMiddleware([VerifyCsrfToken::class])
+    ->name('webhooks.github');
+
 Route::prefix('{current_team}')
+
     ->middleware(['auth', 'verified', EnsureTeamMembership::class])
     ->group(function () {
         Route::view('dashboard', 'dashboard')->name('dashboard');
