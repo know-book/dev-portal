@@ -23,6 +23,9 @@
                     <flux:sidebar.item icon="key" :href="route('settings.github')" :current="request()->routeIs('settings.github')" wire:navigate>
                         {{ __('GitHub App') }}
                     </flux:sidebar.item>
+                    <flux:sidebar.item icon="chart-bar" href="/horizon" target="_blank">
+                        {{ __('Queue Horizon') }}
+                    </flux:sidebar.item>
                 </flux:sidebar.group>
             </flux:sidebar.nav>
 
@@ -75,6 +78,9 @@
                     <flux:menu.radio.group>
                         <flux:menu.item :href="route('profile.edit')" icon="cog" wire:navigate>
                             {{ __('Settings') }}
+                        </flux:menu.item>
+                        <flux:menu.item href="/horizon" target="_blank" icon="chart-bar">
+                            {{ __('Queue Horizon') }}
                         </flux:menu.item>
                     </flux:menu.radio.group>
 
