@@ -63,9 +63,9 @@ test('team edit page can be rendered', function () {
     $response->assertOk();
 });
 
-test('teams can be updated by owners', function () {
+test('teams name and slug can be updated by owners', function () {
     $user = User::factory()->create();
-    $team = Team::factory()->create(['name' => 'Original Name']);
+    $team = Team::factory()->create(['name' => 'Original Name', 'slug' => 'original-slug']);
 
     $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
 
@@ -73,12 +73,14 @@ test('teams can be updated by owners', function () {
 
     Livewire::test('pages::teams.edit', ['team' => $team])
         ->set('teamName', 'Updated Name')
+        ->set('teamSlug', 'new-custom-slug')
         ->call('updateTeam')
         ->assertHasNoErrors();
 
     $this->assertDatabaseHas('teams', [
         'id' => $team->id,
         'name' => 'Updated Name',
+        'slug' => 'new-custom-slug',
     ]);
 });
 

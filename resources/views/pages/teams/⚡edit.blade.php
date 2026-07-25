@@ -8,7 +8,9 @@ use Flux\Flux;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
@@ -18,6 +20,8 @@ new class extends Component
     public Team $teamModel;
 
     public string $teamName = '';
+
+    public string $teamSlug = '';
 
     public array $teamData = [];
 
@@ -33,6 +37,7 @@ new class extends Component
     {
         $this->teamModel = $team;
         $this->teamName = $team->name;
+        $this->teamSlug = $team->slug;
 
         $this->populateTeamData();
     }
@@ -43,23 +48,36 @@ new class extends Component
 
         $validated = $this->validate([
             'teamName' => ['required', 'string', 'max:255', new TeamName],
+            'teamSlug' => [
+                'required',
+                'string',
+                'max:255',
+                'alpha_dash',
+                Rule::unique('teams', 'slug')->ignore($this->teamModel->id),
+            ],
         ]);
 
-        $team = DB::transaction(function () use ($validated) {
+        $newSlug = Str::slug($validated['teamSlug']);
+
+        $team = DB::transaction(function () use ($validated, $newSlug) {
             $team = Team::whereKey($this->teamModel->id)->lockForUpdate()->firstOrFail();
 
-            $team->update(['name' => $validated['teamName']]);
+            $team->update([
+                'name' => $validated['teamName'],
+                'slug' => $newSlug,
+            ]);
 
             return $team;
         });
 
         $this->teamModel = $team;
-
         $this->populateTeamData();
 
-        Flux::toast(variant: 'success', text: __('Team updated.'));
+        URL::defaults(['current_team' => $team->slug]);
 
-        $this->redirectRoute('teams.edit', ['team' => $this->teamModel->fresh()->slug], navigate: true);
+        Flux::toast(variant: 'success', text: __('Team settings updated.'));
+
+        $this->redirectRoute('teams.edit', ['team' => $team->slug], navigate: true);
     }
 
     public function updateMember(int $userId, string $role): void
@@ -85,6 +103,9 @@ new class extends Component
         $user = Auth::user();
 
         $team = $this->teamModel->fresh();
+
+        $this->teamName = $team->name;
+        $this->teamSlug = $team->slug;
 
         $this->teamData = [
             'id' => $team->id,
@@ -148,7 +169,20 @@ new class extends Component
                 @if ($this->permissions->canUpdateTeam)
                     <div class="space-y-4">
                         <form wire:submit="updateTeam" class="space-y-6">
-                            <flux:input wire:model="teamName" :label="__('Team name')" required data-test="team-name-input" />
+                            <flux:field>
+                                <flux:label>{{ __('Team name') }}</flux:label>
+                                <flux:input wire:model="teamName" required data-test="team-name-input" />
+                                <flux:error name="teamName" />
+                            </flux:field>
+
+                            <flux:field>
+                                <flux:label>{{ __('Team URL Slug') }}</flux:label>
+                                <flux:input wire:model="teamSlug" required placeholder="my-team" data-test="team-slug-input" />
+                                <flux:description class="text-xs text-slate-500">
+                                    {{ __('URL identifier used for team routes. Projects connect via team ID, so project workloads remain safe.') }}
+                                </flux:description>
+                                <flux:error name="teamSlug" />
+                            </flux:field>
 
                             <flux:button variant="primary" type="submit" data-test="team-save-button">
                                 {{ __('Save') }}
@@ -158,6 +192,7 @@ new class extends Component
                 @else
                     <div>
                         <flux:heading>{{ $teamData['name'] }}</flux:heading>
+                        <flux:text class="font-mono text-xs text-slate-400">Slug: {{ $teamData['slug'] }}</flux:text>
                     </div>
                 @endif
             </div>
