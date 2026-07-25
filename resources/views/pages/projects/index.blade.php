@@ -19,9 +19,23 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
 
     public string $selectedInstallationId = '';
 
+    public string $selectedRepositoryId = '';
+
     public string $repository = '';
 
     public string $description = '';
+
+    protected GitHubAppService $gitHubAppService;
+
+    public function boot(GitHubAppService $gitHubAppService): void
+    {
+        $this->gitHubAppService = $gitHubAppService;
+    }
+
+    public function updatedSelectedInstallationId(): void
+    {
+        $this->reset(['selectedRepositoryId', 'repository']);
+    }
 
     public function createProject(): void
     {
@@ -30,23 +44,48 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
         $validated = $this->validate([
             'name' => ['required', 'string', 'max:255'],
             'framework' => ['required', Rule::enum(ProjectFramework::class)],
+            'selectedInstallationId' => [
+                'nullable',
+                Rule::exists('github_installations', 'id')->where('team_id', $team->id),
+            ],
+            'selectedRepositoryId' => ['nullable', 'string', 'max:255'],
             'repository' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $installationId = $this->selectedInstallationId ? (int) $this->selectedInstallationId : null;
+        $installationId = $validated['selectedInstallationId'] ? (int) $validated['selectedInstallationId'] : null;
+        $repositoryName = $validated['repository'] ?: null;
+        $repositoryId = null;
+        $defaultBranch = 'main';
+
+        if ($installationId !== null && $validated['selectedRepositoryId']) {
+            $selectedRepository = collect($this->repositories)
+                ->firstWhere('id', (int) $validated['selectedRepositoryId']);
+
+            if (! $selectedRepository) {
+                $this->addError('selectedRepositoryId', __('Select a repository from the connected GitHub installation.'));
+
+                return;
+            }
+
+            $repositoryName = $selectedRepository['full_name'];
+            $repositoryId = (string) $selectedRepository['id'];
+            $defaultBranch = $selectedRepository['default_branch'] ?: $defaultBranch;
+        }
 
         $project = $team->projects()->create([
             'name' => $validated['name'],
             'framework' => $validated['framework'],
             'github_installation_id' => $installationId,
-            'repository' => $validated['repository'] ?: null,
+            'repository' => $repositoryName,
+            'repository_id' => $repositoryId,
+            'default_branch' => $defaultBranch,
             'description' => $validated['description'] ?: null,
         ]);
 
         $this->dispatch('close-modal', name: 'create-project');
 
-        $this->reset(['name', 'framework', 'selectedInstallationId', 'repository', 'description']);
+        $this->reset(['name', 'framework', 'selectedInstallationId', 'selectedRepositoryId', 'repository', 'description']);
 
         Flux::toast(variant: 'success', text: __('Project ":name" created.', ['name' => $project->name]));
     }
@@ -79,6 +118,37 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
     public function gitHubInstallations(): Collection
     {
         return Auth::user()->currentTeam?->githubInstallations()->get() ?? collect();
+    }
+
+    /**
+     * @return array<int, array{id: int, name: string, full_name: string, default_branch: string, html_url: string}>
+     */
+    #[Computed]
+    public function repositories(): array
+    {
+        $team = Auth::user()->currentTeam;
+
+        if (! $team || $this->selectedInstallationId === '') {
+            return [];
+        }
+
+        $installation = $team->githubInstallations()->find($this->selectedInstallationId);
+
+        if (! $installation) {
+            return [];
+        }
+
+        return collect($this->gitHubAppService->getInstallationRepositories($installation->installation_id))
+            ->map(fn (array $repository): array => [
+                'id' => (int) $repository['id'],
+                'name' => (string) $repository['name'],
+                'full_name' => (string) $repository['full_name'],
+                'default_branch' => (string) ($repository['default_branch'] ?? 'main'),
+                'html_url' => (string) ($repository['html_url'] ?? ''),
+            ])
+            ->sortBy('full_name')
+            ->values()
+            ->all();
     }
 }; ?>
 
@@ -234,20 +304,34 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
             @if ($this->gitHubInstallations->isNotEmpty())
                 <flux:field>
                     <flux:label>{{ __('GitHub Account / Organization') }}</flux:label>
-                    <flux:select wire:model="selectedInstallationId">
+                    <flux:select wire:model.live="selectedInstallationId">
                         <flux:select.option value="">{{ __('Select GitHub Installation') }}</flux:select.option>
                         @foreach ($this->gitHubInstallations as $installation)
                             <flux:select.option value="{{ $installation->id }}">{{ $installation->account_name }} ({{ $installation->account_type }})</flux:select.option>
                         @endforeach
                     </flux:select>
+                    <flux:error name="selectedInstallationId" />
                 </flux:field>
             @endif
 
-            <flux:field>
-                <flux:label>{{ __('Git Repository') }}</flux:label>
-                <flux:input wire:model="repository" type="text" placeholder="org/repo" data-test="project-repo-input" />
-                <flux:error name="repository" />
-            </flux:field>
+            @if ($selectedInstallationId !== '')
+                <flux:field>
+                    <flux:label>{{ __('Git Repository') }}</flux:label>
+                    <flux:select wire:model="selectedRepositoryId" data-test="project-repo-select">
+                        <flux:select.option value="">{{ __('Select repository') }}</flux:select.option>
+                        @foreach ($this->repositories as $repositoryOption)
+                            <flux:select.option value="{{ $repositoryOption['id'] }}">{{ $repositoryOption['full_name'] }}</flux:select.option>
+                        @endforeach
+                    </flux:select>
+                    <flux:error name="selectedRepositoryId" />
+                </flux:field>
+            @else
+                <flux:field>
+                    <flux:label>{{ __('Git Repository') }}</flux:label>
+                    <flux:input wire:model="repository" type="text" placeholder="org/repo" data-test="project-repo-input" />
+                    <flux:error name="repository" />
+                </flux:field>
+            @endif
 
             <flux:field>
                 <flux:label>{{ __('Description (Optional)') }}</flux:label>

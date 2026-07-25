@@ -1,8 +1,10 @@
 <?php
 
 use App\Enums\ProjectFramework;
+use App\Models\GitHubInstallation;
 use App\Models\Project;
 use App\Models\User;
+use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
 
 test('guests are redirected from projects page', function () {
@@ -44,6 +46,76 @@ test('team member can create a new project via livewire', function () {
     ]);
 });
 
+test('team member can create a project from a selected github repository', function () {
+    config([
+        'services.github.app_id' => '12345',
+        'services.github.private_key' => 'test-key',
+    ]);
+
+    Http::preventStrayRequests();
+    Http::fake([
+        'api.github.com/app/installations/*/access_tokens' => Http::response(['token' => 'installation-token']),
+        'api.github.com/installation/repositories*' => Http::response([
+            'repositories' => [
+                [
+                    'id' => 987654,
+                    'name' => 'my-laravel-app',
+                    'full_name' => 'myorg/my-laravel-app',
+                    'default_branch' => 'main',
+                    'html_url' => 'https://github.com/myorg/my-laravel-app',
+                ],
+            ],
+        ]),
+    ]);
+
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+
+    $installation = GitHubInstallation::create([
+        'team_id' => $team->id,
+        'installation_id' => '999888',
+        'account_name' => 'myorg',
+        'account_type' => 'Organization',
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::projects.index')
+        ->set('name', 'My Laravel App')
+        ->set('framework', 'laravel')
+        ->set('selectedInstallationId', (string) $installation->id)
+        ->set('selectedRepositoryId', '987654')
+        ->call('createProject')
+        ->assertHasNoErrors();
+
+    $this->assertDatabaseHas('projects', [
+        'team_id' => $team->id,
+        'github_installation_id' => $installation->id,
+        'repository' => 'myorg/my-laravel-app',
+        'repository_id' => '987654',
+        'default_branch' => 'main',
+    ]);
+});
+
+test('team member cannot create a project from another team github installation', function () {
+    $user = User::factory()->create();
+    $otherUser = User::factory()->create();
+
+    $installation = GitHubInstallation::create([
+        'team_id' => $otherUser->currentTeam->id,
+        'installation_id' => '111222',
+        'account_name' => 'other-org',
+        'account_type' => 'Organization',
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::projects.index')
+        ->set('name', 'Blocked App')
+        ->set('framework', 'laravel')
+        ->set('selectedInstallationId', (string) $installation->id)
+        ->call('createProject')
+        ->assertHasErrors(['selectedInstallationId']);
+});
+
 test('team member can view project details', function () {
     $user = User::factory()->create();
     $team = $user->currentTeam;
@@ -77,7 +149,6 @@ test('team member can delete a project', function () {
         ->test('pages::projects.index')
         ->call('deleteProject', $project->id)
         ->assertHasNoErrors();
-
 
     $this->assertSoftDeleted('projects', [
         'id' => $project->id,

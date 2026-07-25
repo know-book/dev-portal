@@ -40,5 +40,6 @@ return [
         'app_slug' => env('GITHUB_APP_SLUG', 'dev-portal-app'),
         'private_key' => env('GITHUB_APP_PRIVATE_KEY'),
         'webhook_secret' => env('GITHUB_APP_WEBHOOK_SECRET'),
+        'api_version' => env('GITHUB_API_VERSION', '2026-03-10'),
     ],
 ];

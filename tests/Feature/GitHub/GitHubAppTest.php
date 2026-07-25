@@ -4,6 +4,8 @@ use App\Jobs\ProcessGitHubWebhookJob;
 use App\Models\User;
 use App\Services\GitHub\GitHubAppService;
 use App\Services\Kubernetes\K8sBuildEngineService;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
 test('github app service generates jwt and verifies signature', function () {
@@ -18,6 +20,48 @@ test('github app service generates jwt and verifies signature', function () {
     $signature = 'sha256='.hash_hmac('sha256', $payload, $secret);
 
     expect($service->verifyWebhookSignature($payload, $signature, $secret))->toBeTrue();
+});
+
+test('github app service lists installation repositories with pagination', function () {
+    Cache::flush();
+
+    config([
+        'services.github.app_id' => '12345',
+        'services.github.private_key' => 'test-key',
+    ]);
+
+    Http::preventStrayRequests();
+    Http::fake([
+        'api.github.com/app/installations/*/access_tokens' => Http::response(['token' => 'installation-token']),
+        'api.github.com/installation/repositories*page=1' => Http::response([
+            'repositories' => [
+                [
+                    'id' => 1,
+                    'name' => 'alpha',
+                    'full_name' => 'acme/alpha',
+                    'default_branch' => 'main',
+                    'html_url' => 'https://github.com/acme/alpha',
+                ],
+            ],
+        ], 200, ['Link' => '<https://api.github.com/installation/repositories?per_page=100&page=2>; rel="next"']),
+        'api.github.com/installation/repositories*page=2' => Http::response([
+            'repositories' => [
+                [
+                    'id' => 2,
+                    'name' => 'beta',
+                    'full_name' => 'acme/beta',
+                    'default_branch' => 'trunk',
+                    'html_url' => 'https://github.com/acme/beta',
+                ],
+            ],
+        ]),
+    ]);
+
+    $repositories = (new GitHubAppService)->getInstallationRepositories('999888');
+
+    expect($repositories)->toHaveCount(2)
+        ->and($repositories[0]['full_name'])->toBe('acme/alpha')
+        ->and($repositories[1]['default_branch'])->toBe('trunk');
 });
 
 test('webhook endpoint accepts push event and dispatches job', function () {

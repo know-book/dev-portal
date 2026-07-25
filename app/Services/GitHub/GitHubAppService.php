@@ -4,6 +4,7 @@ namespace App\Services\GitHub;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 class GitHubAppService
 {
@@ -16,7 +17,6 @@ class GitHubAppService
         $privateKey = $privateKey ?: config('services.github.private_key');
 
         if (empty($privateKey)) {
-            // Placeholder key structure for dev fallback
             $privateKey = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0\n-----END RSA PRIVATE KEY-----";
         }
 
@@ -49,18 +49,26 @@ class GitHubAppService
     public function getInstallationAccessToken(string $installationId): string
     {
         return Cache::remember("github_app_token_{$installationId}", 50 * 60, function () use ($installationId) {
+            if (blank(config('services.github.app_id')) || blank(config('services.github.private_key'))) {
+                return '';
+            }
+
             $jwt = $this->generateAppJwt();
 
             $response = Http::withHeaders([
                 'Authorization' => "Bearer {$jwt}",
-                'Accept' => 'application/vnd.github.v3+json',
-            ])->post("https://api.github.com/app/installations/{$installationId}/access_tokens");
+                'Accept' => 'application/vnd.github+json',
+                'X-GitHub-Api-Version' => config('services.github.api_version'),
+            ])
+                ->timeout(10)
+                ->connectTimeout(3)
+                ->post("https://api.github.com/app/installations/{$installationId}/access_tokens");
 
             if ($response->successful()) {
                 return (string) $response->json('token');
             }
 
-            return 'fake-installation-access-token';
+            return '';
         });
     }
 
@@ -73,16 +81,40 @@ class GitHubAppService
     {
         $token = $this->getInstallationAccessToken($installationId);
 
-        $response = Http::withHeaders([
-            'Authorization' => "Bearer {$token}",
-            'Accept' => 'application/vnd.github.v3+json',
-        ])->get('https://api.github.com/installation/repositories');
-
-        if ($response->successful()) {
-            return $response->json('repositories') ?? [];
+        if ($token === '') {
+            return [];
         }
 
-        return [];
+        $repositories = [];
+        $page = 1;
+
+        do {
+            $response = Http::withHeaders([
+                'Authorization' => "Bearer {$token}",
+                'Accept' => 'application/vnd.github+json',
+                'X-GitHub-Api-Version' => config('services.github.api_version'),
+            ])
+                ->timeout(10)
+                ->connectTimeout(3)
+                ->get('https://api.github.com/installation/repositories', [
+                    'per_page' => 100,
+                    'page' => $page,
+                ]);
+
+            if (! $response->successful()) {
+                return [];
+            }
+
+            $repositories = [
+                ...$repositories,
+                ...($response->json('repositories') ?? []),
+            ];
+
+            $hasNextPage = Str::contains((string) $response->header('Link'), 'rel="next"');
+            $page++;
+        } while ($hasNextPage);
+
+        return $repositories;
     }
 
     /**
