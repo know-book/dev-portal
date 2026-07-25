@@ -4,9 +4,11 @@ use App\Actions\Projects\CreateProject;
 use App\Enums\ProjectFramework;
 use App\Jobs\InitializeProjectManifests;
 use App\Models\Project;
+use App\Models\ProjectManifestPatch;
 use App\Models\User;
 use App\Services\Manifests\ManifestCompiler;
 use App\Services\Manifests\ManifestPresetRegistry;
+use Livewire\Livewire;
 use Symfony\Component\Yaml\Yaml;
 
 test('project creation initializes a laravel manifest workspace', function () {
@@ -73,6 +75,72 @@ test('nextjs projects initialize with a node web manifest preset', function () {
         ->and($files['kustomization.yaml'])->not->toContain('autoscaling/hpa.yaml');
 
     assertYamlFilesParse($files);
+});
+
+test('team member can view the manifest editor file tree', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+    $project = app(CreateProject::class)->handle($team, [
+        'name' => 'Editor App',
+        'framework' => ProjectFramework::Laravel->value,
+    ])->refresh();
+
+    $this->actingAs($user)
+        ->get(route('projects.manifests', ['current_team' => $team->slug, 'project' => $project->slug]))
+        ->assertOk()
+        ->assertSee('Manifest Editor')
+        ->assertSee('kustomization.yaml')
+        ->assertSee('workloads')
+        ->assertSee('web-deployment.yaml');
+});
+
+test('team member can save and reset manifest patches', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+    $project = app(CreateProject::class)->handle($team, [
+        'name' => 'Patch App',
+        'framework' => ProjectFramework::Laravel->value,
+    ])->refresh();
+
+    $manifest = $project->manifest()->firstOrFail();
+    $editedIngress = str_replace('patch-app.example.test', 'patch-app.internal.test', app(ManifestCompiler::class)->compile($manifest)['ingress.yaml']);
+
+    Livewire::actingAs($user)
+        ->test('pages::projects.manifests', ['project' => $project])
+        ->call('selectFile', 'ingress.yaml')
+        ->set('content', $editedIngress)
+        ->call('saveFile')
+        ->assertHasNoErrors()
+        ->call('validateManifest')
+        ->assertSet('validationMessage', 'Manifest tree parsed successfully.');
+
+    expect(ProjectManifestPatch::where('project_manifest_id', $manifest->id)->where('path', 'ingress.yaml')->exists())->toBeTrue();
+
+    Livewire::actingAs($user)
+        ->test('pages::projects.manifests', ['project' => $project])
+        ->call('selectFile', 'ingress.yaml')
+        ->call('resetFile')
+        ->assertHasNoErrors();
+
+    expect(ProjectManifestPatch::where('project_manifest_id', $manifest->id)->where('path', 'ingress.yaml')->exists())->toBeFalse();
+});
+
+test('manifest editor blocks plain kubernetes secrets', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+    $project = app(CreateProject::class)->handle($team, [
+        'name' => 'Secret App',
+        'framework' => ProjectFramework::Laravel->value,
+    ])->refresh();
+
+    Livewire::actingAs($user)
+        ->test('pages::projects.manifests', ['project' => $project])
+        ->call('selectFile', 'secrets/external-secret.yaml')
+        ->set('content', "apiVersion: v1\nkind: Secret\nmetadata:\n  name: blocked\n")
+        ->call('saveFile')
+        ->assertHasErrors(['content']);
+
+    expect(ProjectManifestPatch::where('project_manifest_id', $project->manifest()->value('id'))->exists())->toBeFalse();
 });
 
 /**

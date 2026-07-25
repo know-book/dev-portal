@@ -17,6 +17,7 @@ Route::prefix('{current_team}')
     ->group(function () {
         Route::view('dashboard', 'dashboard')->name('dashboard');
         Route::livewire('projects', 'pages::projects.index')->name('projects.index');
+        Route::livewire('projects/{project}/manifests', 'pages::projects.manifests')->name('projects.manifests');
         Route::livewire('projects/{project}', 'pages::projects.show')->name('projects.show');
     });
 

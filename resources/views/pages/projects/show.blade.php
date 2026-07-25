@@ -87,6 +87,9 @@ new #[Layout('layouts.app')] #[Title('Project Details')] class extends Component
         </div>
 
         <div class="flex items-center gap-2">
+            <flux:button variant="filled" icon="document-text" size="sm" class="cursor-pointer" :href="route('projects.manifests', ['project' => $project->slug])" wire:navigate>
+                {{ __('Manifests') }}
+            </flux:button>
             <flux:button variant="filled" icon="arrow-path" size="sm" class="cursor-pointer">
                 {{ __('Sync ArgoCD') }}
             </flux:button>
