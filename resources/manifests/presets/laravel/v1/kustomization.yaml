@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: {{ namespace }}
+
+resources:
+  - namespace.yaml
+  - workloads/web-deployment.yaml
+  - services/web-service.yaml
+  - components/worker/deployment.yaml
+  - components/horizon/deployment.yaml
+  - components/scheduler/cronjob.yaml
+  - secrets/external-secret.yaml
+  - ingress.yaml
+  - autoscaling/hpa.yaml
+
+commonLabels:
+  app.kubernetes.io/managed-by: dev-portal
+  app.kubernetes.io/part-of: {{ project_slug }}
+
+images:
+  - name: {{ image_repository }}
+    newTag: {{ image_tag }}
+
+configMapGenerator:
+  - name: php-config
+    files:
+      - config/php-memory-limit.ini
+      - config/php-fpm-access-log.conf
+  - name: nginx-config
+    files:
+      - config/nginx.conf

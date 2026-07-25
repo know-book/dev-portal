@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ project_slug }}-horizon
+  labels:
+    app.kubernetes.io/name: {{ project_slug }}
+    app.kubernetes.io/component: horizon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ project_slug }}
+      app.kubernetes.io/component: horizon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ project_slug }}
+        app.kubernetes.io/component: horizon
+    spec:
+      terminationGracePeriodSeconds: 3700
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: horizon
+          image: {{ image_repository }}:{{ image_tag }}
+          command: ["php", "artisan", "horizon"]
+          envFrom:
+            - secretRef:
+                name: {{ secret_name }}
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1280Mi
+          livenessProbe:
+            exec:
+              command: ["php", "artisan", "horizon:status"]
+            initialDelaySeconds: 30
+            periodSeconds: 30

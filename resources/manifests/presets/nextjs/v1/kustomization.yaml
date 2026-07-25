@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: {{ namespace }}
+
+resources:
+  - namespace.yaml
+  - workloads/web-deployment.yaml
+  - services/web-service.yaml
+  - secrets/external-secret.yaml
+  - ingress.yaml
+
+commonLabels:
+  app.kubernetes.io/managed-by: dev-portal
+  app.kubernetes.io/part-of: {{ project_slug }}
+
+images:
+  - name: {{ image_repository }}
+    newTag: {{ image_tag }}

@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ project_slug }}-scheduler
+  labels:
+    app.kubernetes.io/name: {{ project_slug }}
+    app.kubernetes.io/component: scheduler
+spec:
+  schedule: "* * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: {{ project_slug }}
+            app.kubernetes.io/component: scheduler
+        spec:
+          imagePullSecrets:
+            - name: ghcr-secret
+          containers:
+            - name: scheduler
+              image: {{ image_repository }}:{{ image_tag }}
+              imagePullPolicy: IfNotPresent
+              command: ["php", "artisan", "schedule:run"]
+              envFrom:
+                - secretRef:
+                    name: {{ secret_name }}
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 512Mi
+                limits:
+                  cpu: 200m
+                  memory: 1280Mi
+          restartPolicy: OnFailure

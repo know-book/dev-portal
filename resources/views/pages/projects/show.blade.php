@@ -19,7 +19,7 @@ new #[Layout('layouts.app')] #[Title('Project Details')] class extends Component
             abort(404);
         }
 
-        $this->project = $project;
+        $this->project = $project->loadMissing(['manifest', 'team']);
     }
 
     public function deleteProject(): void
@@ -37,6 +37,26 @@ new #[Layout('layouts.app')] #[Title('Project Details')] class extends Component
         Flux::toast(variant: 'success', text: __('Project ":name" deleted.', ['name' => $projectName]));
 
         $this->redirectRoute('projects.index', navigate: true);
+    }
+
+    public function initializationBadgeColor(): string
+    {
+        return match ($this->project->initialization_status) {
+            Project::InitializationReady => 'emerald',
+            Project::InitializationFailed => 'red',
+            Project::InitializationInitializing => 'amber',
+            default => 'zinc',
+        };
+    }
+
+    public function initializationDotClass(): string
+    {
+        return match ($this->project->initialization_status) {
+            Project::InitializationReady => 'bg-emerald-500',
+            Project::InitializationFailed => 'bg-red-500',
+            Project::InitializationInitializing => 'bg-amber-500',
+            default => 'bg-slate-400',
+        };
     }
 }; ?>
 
@@ -58,6 +78,7 @@ new #[Layout('layouts.app')] #[Title('Project Details')] class extends Component
                     @else
                         <flux:badge color="zinc" size="sm" class="font-mono text-2xs uppercase">{{ $project->framework->label() }}</flux:badge>
                     @endif
+                    <flux:badge color="{{ $this->initializationBadgeColor() }}" size="sm" class="font-mono text-2xs uppercase">{{ $project->initialization_status }}</flux:badge>
                 </div>
                 @if ($project->repository)
                     <flux:subheading class="font-mono text-xs text-slate-500 dark:text-slate-400">{{ $project->repository }}</flux:subheading>
@@ -121,16 +142,16 @@ new #[Layout('layouts.app')] #[Title('Project Details')] class extends Component
         <div class="rounded-md border border-slate-200 bg-white p-5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                    <flux:icon name="cpu-chip" class="size-5 text-blue-500" />
-                    <flux:heading size="md" class="font-medium text-slate-900 dark:text-slate-100">{{ __('K8s Workloads') }}</flux:heading>
+                    <span class="size-2.5 rounded-full {{ $this->initializationDotClass() }}"></span>
+                    <flux:heading size="md" class="font-medium text-slate-900 dark:text-slate-100">{{ __('Manifest Init') }}</flux:heading>
                 </div>
-                <flux:badge color="blue" size="sm" class="font-mono text-2xs uppercase">1 REPLICA</flux:badge>
+                <flux:badge color="{{ $this->initializationBadgeColor() }}" size="sm" class="font-mono text-2xs uppercase">{{ $project->initialization_status }}</flux:badge>
             </div>
             <flux:text class="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                {{ __('Deployment, Service, Ingress, HPA') }}
+                {{ $project->initialized_at ? __('Initialized :time', ['time' => $project->initialized_at->format('Y-m-d H:i')]) : __('Preset workspace is being prepared') }}
             </flux:text>
             <div class="mt-4 flex items-center justify-between font-mono text-2xs text-slate-400">
-                <span>CPU: 250m | MEM: 512Mi</span>
+                <span>{{ $project->manifest?->preset_key ?? $project->framework->value }}/{{ $project->manifest?->preset_version ?? 'v1' }}</span>
             </div>
         </div>
     </div>

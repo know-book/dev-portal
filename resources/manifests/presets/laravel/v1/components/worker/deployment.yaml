@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ project_slug }}-worker
+  labels:
+    app.kubernetes.io/name: {{ project_slug }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ project_slug }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ project_slug }}
+        app.kubernetes.io/component: worker
+    spec:
+      terminationGracePeriodSeconds: 3700
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: worker
+          image: {{ image_repository }}:{{ image_tag }}
+          command: ["php", "artisan", "queue:work"]
+          args: ["--tries=3", "--timeout=3610"]
+          envFrom:
+            - secretRef:
+                name: {{ secret_name }}
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1280Mi

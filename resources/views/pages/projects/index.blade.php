@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Projects\CreateProject;
 use App\Enums\ProjectFramework;
 use App\Models\Project;
 use App\Services\GitHub\GitHubAppService;
@@ -37,7 +38,7 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
         $this->reset(['selectedRepositoryId', 'repository']);
     }
 
-    public function createProject(): void
+    public function createProject(CreateProject $createProject): void
     {
         $team = Auth::user()->currentTeam;
 
@@ -73,7 +74,7 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
             $defaultBranch = $selectedRepository['default_branch'] ?: $defaultBranch;
         }
 
-        $project = $team->projects()->create([
+        $project = $createProject->handle($team, [
             'name' => $validated['name'],
             'framework' => $validated['framework'],
             'github_installation_id' => $installationId,
@@ -150,6 +151,26 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
             ->values()
             ->all();
     }
+
+    public function initializationBadgeColor(Project $project): string
+    {
+        return match ($project->initialization_status) {
+            Project::InitializationReady => 'emerald',
+            Project::InitializationFailed => 'red',
+            Project::InitializationInitializing => 'amber',
+            default => 'zinc',
+        };
+    }
+
+    public function initializationDotClass(Project $project): string
+    {
+        return match ($project->initialization_status) {
+            Project::InitializationReady => 'bg-emerald-500',
+            Project::InitializationFailed => 'bg-red-500',
+            Project::InitializationInitializing => 'bg-amber-500',
+            default => 'bg-slate-400',
+        };
+    }
 }; ?>
 
 <div class="flex w-full flex-1 flex-col gap-6">
@@ -213,8 +234,10 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
                 <!-- VMware Clarity Footer Status & Actions -->
                 <div class="mt-6 flex items-center justify-between border-t border-slate-100 pt-3 dark:border-slate-800">
                     <div class="flex items-center gap-2">
-                        <span class="size-2 rounded-full bg-emerald-500"></span>
-                        <span class="text-2xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">{{ __('Ready') }}</span>
+                        <span class="size-2 rounded-full {{ $this->initializationDotClass($project) }}"></span>
+                        <flux:badge color="{{ $this->initializationBadgeColor($project) }}" size="sm" class="font-mono text-2xs uppercase">
+                            {{ $project->initialization_status }}
+                        </flux:badge>
                     </div>
 
                     <div class="flex items-center gap-1">

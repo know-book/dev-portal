@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -23,18 +24,41 @@ use Illuminate\Support\Str;
  * @property string|null $repository_id
  * @property string $default_branch
  * @property bool $auto_deploy
+ * @property string $initialization_status
+ * @property string|null $initialization_error
+ * @property Carbon|null $initialized_at
  * @property string|null $description
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
  * @property-read Team $team
  * @property-read GitHubInstallation|null $githubInstallation
+ * @property-read ProjectManifest|null $manifest
  */
-#[Fillable(['team_id', 'github_installation_id', 'name', 'slug', 'framework', 'repository', 'repository_id', 'default_branch', 'auto_deploy', 'description'])]
+#[Fillable(['team_id', 'github_installation_id', 'name', 'slug', 'framework', 'repository', 'repository_id', 'default_branch', 'auto_deploy', 'initialization_status', 'initialization_error', 'initialized_at', 'description'])]
 class Project extends Model
 {
     /** @use HasFactory<ProjectFactory> */
     use HasFactory, SoftDeletes;
+
+    public const InitializationPending = 'pending';
+
+    public const InitializationInitializing = 'initializing';
+
+    public const InitializationReady = 'ready';
+
+    public const InitializationFailed = 'failed';
+
+    /**
+     * The model's default values for attributes.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'default_branch' => 'main',
+        'auto_deploy' => true,
+        'initialization_status' => self::InitializationPending,
+    ];
 
     /**
      * Bootstrap the model and its traits.
@@ -117,6 +141,16 @@ class Project extends Model
     }
 
     /**
+     * Get the manifest workspace for this project.
+     *
+     * @return HasOne<ProjectManifest, $this>
+     */
+    public function manifest(): HasOne
+    {
+        return $this->hasOne(ProjectManifest::class);
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -126,6 +160,7 @@ class Project extends Model
         return [
             'framework' => ProjectFramework::class,
             'auto_deploy' => 'boolean',
+            'initialized_at' => 'datetime',
         ];
     }
 
