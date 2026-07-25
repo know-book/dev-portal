@@ -364,9 +364,17 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
 
             @if ($selectedInstallationId !== '')
                 <flux:field>
-                    <flux:label>{{ __('Git Repository') }}</flux:label>
+                    <div class="flex items-center justify-between">
+                        <flux:label>{{ __('Git Repository') }}</flux:label>
+                        <div wire:loading wire:target="selectedInstallationId" class="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400">
+                            <flux:icon name="arrow-path" class="size-3.5 animate-spin" />
+                            <span class="font-medium">{{ __('Fetching repositories...') }}</span>
+                        </div>
+                    </div>
+
                     <flux:select wire:model="selectedRepositoryId" data-test="project-repo-select">
-                        <flux:select.option value="">{{ __('Select repository') }}</flux:option>
+                        <flux:select.option value="" wire:loading.remove wire:target="selectedInstallationId">{{ __('Select repository') }}</flux:select.option>
+                        <flux:select.option value="" wire:loading wire:target="selectedInstallationId">{{ __('Loading repositories from GitHub...') }}</flux:select.option>
                         @foreach ($this->repositories as $repositoryOption)
                             <flux:select.option value="{{ $repositoryOption['id'] }}">{{ $repositoryOption['full_name'] }}</flux:select.option>
                         @endforeach
