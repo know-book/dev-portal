@@ -26,6 +26,8 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
 
     public string $description = '';
 
+    public ?int $deletingProjectId = null;
+
     protected GitHubAppService $gitHubAppService;
 
     public function boot(GitHubAppService $gitHubAppService): void
@@ -84,23 +86,47 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
             'description' => $validated['description'] ?: null,
         ]);
 
-        $this->dispatch('close-modal', name: 'create-project');
-
         $this->reset(['name', 'framework', 'selectedInstallationId', 'selectedRepositoryId', 'repository', 'description']);
+
+        Flux::modal('create-project')->close();
 
         Flux::toast(variant: 'success', text: __('Project ":name" created.', ['name' => $project->name]));
     }
 
-    public function deleteProject(int $projectId): void
+    public function confirmDeleteProject(int $projectId): void
     {
-        $project = Auth::user()->currentTeam->projects()->findOrFail($projectId);
-        $projectName = $project->name;
+        $this->deletingProjectId = $projectId;
+        Flux::modal('delete-project')->show();
+    }
 
-        $project->delete();
+    public function deleteProject(?int $projectId = null): void
+    {
+        $targetId = $projectId ?? $this->deletingProjectId;
 
-        $this->dispatch('close-modal', name: "delete-project-{$projectId}");
+        if (! $targetId) {
+            return;
+        }
 
-        Flux::toast(variant: 'success', text: __('Project ":name" deleted.', ['name' => $projectName]));
+        $project = Auth::user()->currentTeam?->projects()->find($targetId);
+
+        if ($project) {
+            $projectName = $project->name;
+            $project->delete();
+            Flux::toast(variant: 'success', text: __('Project ":name" deleted.', ['name' => $projectName]));
+        }
+
+        $this->deletingProjectId = null;
+        Flux::modal('delete-project')->close();
+    }
+
+    #[Computed]
+    public function deletingProject(): ?Project
+    {
+        if (! $this->deletingProjectId) {
+            return null;
+        }
+
+        return Auth::user()->currentTeam?->projects()->find($this->deletingProjectId);
     }
 
     /**
@@ -196,7 +222,7 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
     <!-- Project Cards Grid -->
     <div class="grid auto-rows-min items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
         @forelse ($this->projects as $project)
-            <div class="flex flex-col justify-between rounded-md border border-slate-200 bg-white p-5 shadow-2xs transition hover:border-blue-500 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-500" data-test="project-card">
+            <div wire:key="project-card-{{ $project->id }}" class="flex flex-col justify-between rounded-md border border-slate-200 bg-white p-5 shadow-2xs transition hover:border-blue-500 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-500" data-test="project-card">
                 <div>
                     <div class="flex items-start justify-between gap-2">
                         <div>
@@ -251,16 +277,15 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
                             :tooltip="__('View details')"
                         />
 
-                        <flux:modal.trigger name="delete-project-{{ $project->id }}">
-                            <flux:button
-                                variant="ghost"
-                                size="sm"
-                                icon="trash"
-                                class="cursor-pointer text-red-600 hover:text-red-700 dark:text-red-400"
-                                :tooltip="__('Delete project')"
-                                data-test="delete-project-button"
-                            />
-                        </flux:modal.trigger>
+                        <flux:button
+                            variant="ghost"
+                            size="sm"
+                            icon="trash"
+                            wire:click="confirmDeleteProject({{ $project->id }})"
+                            class="cursor-pointer text-red-600 hover:text-red-700 dark:text-red-400"
+                            :tooltip="__('Delete project')"
+                            data-test="delete-project-button"
+                        />
                     </div>
                 </div>
             </div>
@@ -278,27 +303,27 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
         @endforelse
     </div>
 
-    <!-- Modals (Positioned outside CSS Grid container) -->
-    @foreach ($this->projects as $project)
-        <flux:modal name="delete-project-{{ $project->id }}" focusable class="max-w-md">
-            <form wire:submit="deleteProject({{ $project->id }})" class="space-y-6">
-                <div>
-                    <flux:heading size="lg">{{ __('Delete Project') }}</flux:heading>
-                    <flux:subheading>{{ __('Are you sure you want to delete :name? This action cannot be undone.', ['name' => $project->name]) }}</flux:subheading>
-                </div>
+    <!-- Single Delete Project Modal -->
+    <flux:modal name="delete-project" focusable class="max-w-md">
+        <form wire:submit="deleteProject" class="space-y-6">
+            <div>
+                <flux:heading size="lg">{{ __('Delete Project') }}</flux:heading>
+                <flux:subheading>
+                    {{ __('Are you sure you want to delete :name? This action cannot be undone.', ['name' => $this->deletingProject?->name ?? 'this project']) }}
+                </flux:subheading>
+            </div>
 
-                <div class="flex justify-end space-x-2 rtl:space-x-reverse">
-                    <flux:modal.close>
-                        <flux:button variant="filled" class="cursor-pointer">{{ __('Cancel') }}</flux:button>
-                    </flux:modal.close>
+            <div class="flex justify-end space-x-2 rtl:space-x-reverse">
+                <flux:modal.close>
+                    <flux:button variant="filled" class="cursor-pointer">{{ __('Cancel') }}</flux:button>
+                </flux:modal.close>
 
-                    <flux:button variant="danger" type="submit" class="cursor-pointer" data-test="confirm-delete-project">
-                        {{ __('Delete Project') }}
-                    </flux:button>
-                </div>
-            </form>
-        </flux:modal>
-    @endforeach
+                <flux:button variant="danger" type="submit" class="cursor-pointer" data-test="confirm-delete-project">
+                    {{ __('Delete Project') }}
+                </flux:button>
+            </div>
+        </form>
+    </flux:modal>
 
     <!-- Create Project Modal -->
     <flux:modal name="create-project" :show="$errors->isNotEmpty()" focusable class="max-w-lg">
@@ -341,7 +366,7 @@ new #[Layout('layouts.app')] #[Title('Projects')] class extends Component {
                 <flux:field>
                     <flux:label>{{ __('Git Repository') }}</flux:label>
                     <flux:select wire:model="selectedRepositoryId" data-test="project-repo-select">
-                        <flux:select.option value="">{{ __('Select repository') }}</flux:select.option>
+                        <flux:select.option value="">{{ __('Select repository') }}</flux:option>
                         @foreach ($this->repositories as $repositoryOption)
                             <flux:select.option value="{{ $repositoryOption['id'] }}">{{ $repositoryOption['full_name'] }}</flux:select.option>
                         @endforeach

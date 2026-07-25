@@ -32,7 +32,7 @@ new #[Layout('layouts.app')] #[Title('Project Details')] class extends Component
         $projectName = $this->project->name;
         $this->project->delete();
 
-        $this->dispatch('close-modal', name: 'delete-project');
+        Flux::modal('delete-project')->close();
 
         Flux::toast(variant: 'success', text: __('Project ":name" deleted.', ['name' => $projectName]));
 
