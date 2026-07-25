@@ -16,6 +16,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             SetTeamUrlDefaults::class,
         ]);
+        $middleware->validateCsrfTokens(except: [
+            'api/webhooks/github',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
