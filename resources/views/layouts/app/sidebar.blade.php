@@ -20,9 +20,11 @@
                     <flux:sidebar.item icon="folder" :href="route('projects.index')" :current="request()->routeIs('projects.*')" wire:navigate>
                         {{ __('Projects') }}
                     </flux:sidebar.item>
+                    <flux:sidebar.item icon="key" :href="route('settings.github')" :current="request()->routeIs('settings.github')" wire:navigate>
+                        {{ __('GitHub App') }}
+                    </flux:sidebar.item>
                 </flux:sidebar.group>
             </flux:sidebar.nav>
-
 
             <flux:spacer />
 

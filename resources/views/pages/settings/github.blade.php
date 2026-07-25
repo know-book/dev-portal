@@ -9,6 +9,20 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Title('GitHub Integration')] class extends Component {
+    public function mount(): void
+    {
+        $installationId = request()->query('installation_id');
+        $team = Auth::user()->currentTeam;
+
+        if ($installationId && $team) {
+            $installation = GitHubInstallation::where('installation_id', (string) $installationId)->first();
+            if ($installation) {
+                $installation->update(['team_id' => $team->id]);
+                Flux::toast(variant: 'success', text: __('GitHub App connected for ":name".', ['name' => $installation->account_name]));
+            }
+        }
+    }
+
     public function disconnectInstallation(int $installationId): void
     {
         $installation = Auth::user()->currentTeam->githubInstallations()->findOrFail($installationId);
@@ -25,7 +39,16 @@ new #[Title('GitHub Integration')] class extends Component {
     #[Computed]
     public function installations(): Collection
     {
-        return Auth::user()->currentTeam?->githubInstallations()->get() ?? collect();
+        $team = Auth::user()->currentTeam;
+
+        if (! $team) {
+            return collect();
+        }
+
+        // Auto-link any orphan installations created via webhook to current team
+        GitHubInstallation::whereNull('team_id')->update(['team_id' => $team->id]);
+
+        return $team->githubInstallations()->get();
     }
 }; ?>
 
