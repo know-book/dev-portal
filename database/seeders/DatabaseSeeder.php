@@ -30,8 +30,10 @@ class DatabaseSeeder extends Seeder
         );
 
         if (! $admin->currentTeam) {
+            $teamName = "Admin User's Team";
             $team = Team::create([
-                'name' => "Admin User's Team",
+                'name' => $teamName,
+                'slug' => Team::generateUniqueTeamSlug($teamName),
                 'is_personal' => true,
             ]);
 
