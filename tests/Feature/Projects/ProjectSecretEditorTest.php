@@ -3,6 +3,7 @@
 use App\Contracts\ProjectSecretStore;
 use App\Data\SecretDocument;
 use App\Data\SecretMetadata;
+use App\Exceptions\SecretStoreException;
 use App\Exceptions\SecretVersionConflict;
 use App\Models\Project;
 use App\Models\User;
@@ -121,6 +122,22 @@ test('secret editor surfaces concurrent vault updates without writing audit meta
     ]);
 });
 
+test('secret editor displays actionable vault diagnostics', function () {
+    $user = User::factory()->create();
+    $project = Project::factory()->create(['team_id' => $user->currentTeam->id]);
+    $this->secretStore->failureOnWrite = new SecretStoreException(
+        'Vault denied the secret write (HTTP 403). Check token capabilities. Reference: 01VAULTFAILURE.',
+    );
+
+    Livewire::actingAs($user)
+        ->test('pages::projects.secrets', ['project' => $project])
+        ->set('secretJson', '{"APP_KEY":"value"}')
+        ->call('save')
+        ->assertHasErrors(['secretJson'])
+        ->assertSee('Vault denied the secret write (HTTP 403)')
+        ->assertSee('Reference: 01VAULTFAILURE');
+});
+
 test('user cannot view another team project secret editor', function () {
     $user = User::factory()->create();
     $otherUser = User::factory()->create();
@@ -150,6 +167,8 @@ class FakeProjectSecretStore implements ProjectSecretStore
     public array $lastValues = [];
 
     public bool $conflictOnWrite = false;
+
+    public ?SecretStoreException $failureOnWrite = null;
 
     public function __construct()
     {
@@ -181,6 +200,10 @@ class FakeProjectSecretStore implements ProjectSecretStore
 
         if ($this->conflictOnWrite) {
             throw new SecretVersionConflict('The secret changed after it was revealed.');
+        }
+
+        if ($this->failureOnWrite) {
+            throw $this->failureOnWrite;
         }
 
         $this->document = new SecretDocument($values, $expectedVersion + 1);
