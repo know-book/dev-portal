@@ -42,4 +42,36 @@ return [
         'webhook_secret' => env('GITHUB_APP_WEBHOOK_SECRET'),
         'api_version' => env('GITHUB_API_VERSION', '2026-03-10'),
     ],
+
+    'vault' => [
+        'url' => env('VAULT_ADDR'),
+        'token' => env('VAULT_TOKEN'),
+        'namespace' => env('VAULT_NAMESPACE'),
+        'mount' => env('VAULT_KV_MOUNT', 'secret'),
+        'verify_tls' => env('VAULT_VERIFY_TLS', true),
+        'connect_timeout' => env('VAULT_CONNECT_TIMEOUT', 3),
+        'timeout' => env('VAULT_TIMEOUT', 10),
+    ],
+
+    'kubernetes' => [
+        'url' => env('KUBERNETES_API_URL'),
+        'token' => env('KUBERNETES_API_TOKEN'),
+        'ca_cert' => env('KUBERNETES_CA_CERT'),
+        'verify_tls' => env('KUBERNETES_VERIFY_TLS', true),
+        'connect_timeout' => env('KUBERNETES_CONNECT_TIMEOUT', 3),
+        'timeout' => env('KUBERNETES_TIMEOUT', 10),
+    ],
+
+    'argocd' => [
+        'url' => env('ARGOCD_URL'),
+        'token' => env('ARGOCD_TOKEN'),
+        'namespace' => env('ARGOCD_NAMESPACE', 'argocd'),
+        'project' => env('ARGOCD_PROJECT', 'default'),
+        'destination_server' => env('ARGOCD_DESTINATION_SERVER', 'https://kubernetes.default.svc'),
+        'auto_prune' => env('ARGOCD_AUTO_PRUNE', true),
+        'self_heal' => env('ARGOCD_SELF_HEAL', true),
+        'verify_tls' => env('ARGOCD_VERIFY_TLS', true),
+        'connect_timeout' => env('ARGOCD_CONNECT_TIMEOUT', 3),
+        'timeout' => env('ARGOCD_TIMEOUT', 10),
+    ],
 ];

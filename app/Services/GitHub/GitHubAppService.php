@@ -2,6 +2,7 @@
 
 namespace App\Services\GitHub;
 
+use App\Models\GitHubInstallation;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -75,7 +76,7 @@ class GitHubAppService
     /**
      * Get accessible repositories for an installation.
      *
-     * @return array<int, array{id: int, name: string, full_name: string, default_branch: string, html_url: string}>
+     * @return array<int, array{id: int, name: string, full_name: string, default_branch: string, html_url: string, permissions?: array<string, bool>}>
      */
     public function getInstallationRepositories(string $installationId): array
     {
@@ -115,6 +116,26 @@ class GitHubAppService
         } while ($hasNextPage);
 
         return $repositories;
+    }
+
+    /**
+     * @return array{id: int, name: string, full_name: string, default_branch: string, html_url: string, permissions?: array<string, bool>}|null
+     */
+    public function findInstallationRepository(GitHubInstallation $installation, string $repositoryId): ?array
+    {
+        $repository = collect($this->getInstallationRepositories($installation->installation_id))
+            ->firstWhere('id', (int) $repositoryId);
+
+        return is_array($repository) ? $repository : null;
+    }
+
+    public function installationCanWriteRepository(GitHubInstallation $installation, string $repositoryId): bool
+    {
+        if (! $installation->canWriteRepositoryContents()) {
+            return false;
+        }
+
+        return $this->findInstallationRepository($installation, $repositoryId) !== null;
     }
 
     /**

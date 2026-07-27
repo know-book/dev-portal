@@ -2,12 +2,16 @@
 
 namespace App\Models;
 
+use App\Enums\GitOpsPublishMode;
+use App\Enums\GitOpsRepositoryMode;
 use App\Enums\ProjectFramework;
 use Database\Factories\ProjectFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
@@ -24,6 +28,13 @@ use Illuminate\Support\Str;
  * @property string|null $repository_id
  * @property string $default_branch
  * @property bool $auto_deploy
+ * @property GitOpsRepositoryMode $gitops_repository_mode
+ * @property int|null $gitops_github_installation_id
+ * @property string|null $gitops_repository
+ * @property string|null $gitops_repository_id
+ * @property string|null $gitops_branch
+ * @property string $gitops_path
+ * @property GitOpsPublishMode $gitops_publish_mode
  * @property string $initialization_status
  * @property string|null $initialization_error
  * @property Carbon|null $initialized_at
@@ -33,9 +44,11 @@ use Illuminate\Support\Str;
  * @property Carbon|null $deleted_at
  * @property-read Team $team
  * @property-read GitHubInstallation|null $githubInstallation
+ * @property-read GitHubInstallation|null $gitOpsGitHubInstallation
  * @property-read ProjectManifest|null $manifest
+ * @property-read Collection<int, ProjectSecretRevision> $secretRevisions
  */
-#[Fillable(['team_id', 'github_installation_id', 'name', 'slug', 'framework', 'repository', 'repository_id', 'default_branch', 'auto_deploy', 'initialization_status', 'initialization_error', 'initialized_at', 'description'])]
+#[Fillable(['team_id', 'github_installation_id', 'gitops_github_installation_id', 'name', 'slug', 'framework', 'repository', 'repository_id', 'default_branch', 'auto_deploy', 'gitops_repository_mode', 'gitops_repository', 'gitops_repository_id', 'gitops_branch', 'gitops_path', 'gitops_publish_mode', 'initialization_status', 'initialization_error', 'initialized_at', 'description'])]
 class Project extends Model
 {
     /** @use HasFactory<ProjectFactory> */
@@ -57,6 +70,9 @@ class Project extends Model
     protected $attributes = [
         'default_branch' => 'main',
         'auto_deploy' => true,
+        'gitops_repository_mode' => GitOpsRepositoryMode::CoLocated->value,
+        'gitops_path' => 'deploy/k8s',
+        'gitops_publish_mode' => GitOpsPublishMode::Direct->value,
         'initialization_status' => self::InitializationPending,
     ];
 
@@ -141,6 +157,16 @@ class Project extends Model
     }
 
     /**
+     * Get the GitHub installation used by a separate GitOps repository.
+     *
+     * @return BelongsTo<GitHubInstallation, $this>
+     */
+    public function gitOpsGitHubInstallation(): BelongsTo
+    {
+        return $this->belongsTo(GitHubInstallation::class, 'gitops_github_installation_id');
+    }
+
+    /**
      * Get the manifest workspace for this project.
      *
      * @return HasOne<ProjectManifest, $this>
@@ -148,6 +174,16 @@ class Project extends Model
     public function manifest(): HasOne
     {
         return $this->hasOne(ProjectManifest::class);
+    }
+
+    /**
+     * Get Vault secret write audit metadata for this project.
+     *
+     * @return HasMany<ProjectSecretRevision, $this>
+     */
+    public function secretRevisions(): HasMany
+    {
+        return $this->hasMany(ProjectSecretRevision::class);
     }
 
     /**
@@ -160,6 +196,8 @@ class Project extends Model
         return [
             'framework' => ProjectFramework::class,
             'auto_deploy' => 'boolean',
+            'gitops_repository_mode' => GitOpsRepositoryMode::class,
+            'gitops_publish_mode' => GitOpsPublishMode::class,
             'initialized_at' => 'datetime',
         ];
     }

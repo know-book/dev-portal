@@ -1,6 +1,8 @@
 <?php
 
+use App\Enums\GitOpsRepositoryMode;
 use App\Jobs\ProcessGitHubWebhookJob;
+use App\Models\Project;
 use App\Models\User;
 use App\Services\GitHub\GitHubAppService;
 use App\Services\Kubernetes\K8sBuildEngineService;
@@ -117,4 +119,59 @@ test('process github webhook job syncs installation event to database', function
         'account_name' => 'my-org',
         'account_type' => 'Organization',
     ]);
+});
+
+test('co-located manifest-only pushes do not trigger another image build', function () {
+    $user = User::factory()->create();
+    $project = Project::factory()->create([
+        'team_id' => $user->currentTeam->id,
+        'repository' => 'acme/storefront',
+        'default_branch' => 'main',
+        'gitops_repository_mode' => GitOpsRepositoryMode::CoLocated,
+        'gitops_path' => 'deploy/k8s',
+    ]);
+    $payload = [
+        'repository' => ['full_name' => $project->repository],
+        'ref' => 'refs/heads/main',
+        'after' => 'manifest-commit',
+        'commits' => [[
+            'added' => ['deploy/k8s/.devportal.json'],
+            'modified' => ['deploy/k8s/kustomization.yaml'],
+            'removed' => [],
+        ]],
+    ];
+    $buildEngine = Mockery::mock(K8sBuildEngineService::class);
+    $buildEngine->shouldNotReceive('dispatchBuildJob');
+
+    (new ProcessGitHubWebhookJob('push', $payload))->handle($buildEngine);
+});
+
+test('source changes still trigger a build when manifests also changed', function () {
+    $user = User::factory()->create();
+    $project = Project::factory()->create([
+        'team_id' => $user->currentTeam->id,
+        'repository' => 'acme/storefront',
+        'default_branch' => 'main',
+        'gitops_repository_mode' => GitOpsRepositoryMode::CoLocated,
+        'gitops_path' => 'deploy/k8s',
+    ]);
+    $payload = [
+        'repository' => ['full_name' => $project->repository],
+        'ref' => 'refs/heads/main',
+        'after' => 'source-commit',
+        'commits' => [[
+            'added' => [],
+            'modified' => ['app/Service.php', 'deploy/k8s/kustomization.yaml'],
+            'removed' => [],
+        ]],
+    ];
+    $buildEngine = Mockery::mock(K8sBuildEngineService::class);
+    $buildEngine->shouldReceive('dispatchBuildJob')
+        ->once()
+        ->withArgs(fn (Project $target, string $branch, string $sha): bool => $target->is($project)
+            && $branch === 'main'
+            && $sha === 'source-commit')
+        ->andReturn(['status' => 'queued']);
+
+    (new ProcessGitHubWebhookJob('push', $payload))->handle($buildEngine);
 });

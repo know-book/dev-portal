@@ -22,20 +22,24 @@ Dedicated auto-detection, build configuration, and container templates tailored 
   - Automated Edge / Serverless / Containerized deployment configuration.
 
 ### 2. HashiCorp Vault & Secret Management UI
-- **Direct Web UI `.env` Editor**: Rich interactive `.env` key-value editor in the UI with bulk import, environment branching (Development, Staging, Production), and secret masking/unmasking.
+- **Direct JSON Secret Editor**: Environment variables and secrets are one domain object, edited as a flat JSON object with string keys and string values. The UI does not maintain a separate `.env` or key-value representation.
 - **HashiCorp Vault Integration**:
-  - Native integration with HashiCorp Vault KV (Key-Value) Secret Engine.
-  - Transparent sync between UI `.env` settings and Vault storage.
-  - Automated injection into Kubernetes `Secrets` via Vault Agent Injector or External Secrets Operator (ESO).
-- **AES-256 Encryption at Rest**: Fallback/local encrypted storage for standalone setups.
+  - HashiCorp Vault KV v2 is the source of truth for project secret JSON.
+  - Secret values are never committed to Git or stored in manifest revisions.
+  - Automated injection into Kubernetes `Secrets` via External Secrets Operator (ESO).
+  - Version-aware writes use Vault CAS to prevent concurrent edits from silently overwriting each other.
 
 ### 3. Modular Git Provider Integration (GitOps Engine)
 - **GitHub App First-Class Support**: Seamless repo discovery, OAuth, permission handling, and webhook automation for Push, PR, and Tag/Release events.
 - **Provider Abstraction Layer**: Built with extensible provider interfaces to easily support **GitLab**, **Bitbucket**, and self-hosted **Gitea/Forgejo** in future releases.
+- **Dual GitOps Repository Modes**: Each project can keep deployment manifests in its source repository or publish them to a separate GitOps repository.
+- **Repository Read/Write Access**: Both modes require the connected Git provider installation to have read and write access to every repository used by the project. Access is validated when the repository is connected and again before publishing manifests.
+- **Safe Manifest Publishing**: Support direct commits for small projects and pull-request publishing for reviewed production workflows. Co-located repositories ignore portal-authored or manifest-only commits in build webhooks to prevent deployment commit loops.
 - **Preview Deployments**: Automatic staging environment creation for every Pull Request / Branch with ephemeral URLs.
 
 ### 4. Native ArgoCD Engine Integration
-- **Declarative GitOps Management**: Programmatically generate, apply, and sync ArgoCD `Application` Custom Resources (CRDs) via Kubernetes API & ArgoCD REST/gRPC endpoints.
+- **Declarative GitOps Management**: Programmatically generate and reconcile ArgoCD `Application` Custom Resources (CRDs) through the Kubernetes API, with each Application source derived from the project's selected GitOps repository mode.
+- **Operational API Integration**: Use the ArgoCD REST API for manual sync, hard refresh, resource trees, deployment history, and other operational actions.
 - **Real-Time Health & Log Streaming**: Real-time deployment status, pod health monitoring, and live container logging streamed directly to the Web UI via WebSockets/Server-Sent Events (SSE).
 - **Automated Rollback & Sync Policy**: UI-driven manual sync, auto-sync, prune policies, and instant rollbacks to previous git commit revisions.
 
@@ -46,6 +50,33 @@ Dedicated auto-detection, build configuration, and container templates tailored 
   - Horizontal Pod Autoscaling (HPA), Replicas, and Resource Requests/Limits (CPU & Memory).
   - Persistent Volume Claims (PVC) & Managed Database Attachments.
 - **Transparent Manifest Compilation**: Users can preview, export, or customize the generated Kubernetes Manifests (Helm Charts / Kustomize / Raw YAML) at any time to avoid vendor lock-in.
+
+### 6. GitOps Repository Modes
+
+Every project selects one of the following repository modes. The compiled manifest tree remains identical in both modes; only the publication target changes.
+
+#### Co-Located Mode
+
+- Application source code and generated deployment manifests are maintained in the same repository.
+- The manifest path is configurable and defaults to `deploy/k8s`.
+- The deployment branch defaults to the project's default branch.
+- Source pushes may trigger image builds, but portal-authored commits and pushes that only change the configured manifest path must not trigger another build.
+- ArgoCD points to the project's source repository, deployment branch, and manifest path.
+
+#### Separate GitOps Repository Mode
+
+- Application source code remains in the source repository while generated deployment manifests are published to a separately selected GitOps repository.
+- GitOps repository, branch, and base path are configured per project.
+- The Git provider installation must have read and write access to both the source repository and the GitOps repository.
+- ArgoCD points to the separate GitOps repository and the project-specific path within it.
+
+#### Shared Publication Contract
+
+- Both modes support direct-commit and pull-request publishing strategies.
+- Every successful publication records the target repository, branch, path, commit SHA, compiled hash, actor, and timestamp without recording secret values.
+- Publication must be idempotent: an unchanged compiled hash does not create another commit.
+- Repository access loss blocks publication with an actionable error and never falls back to another repository implicitly.
+- Secret JSON remains in Vault; Git contains only `ExternalSecret` references and non-sensitive rollout metadata.
 
 ---
 
@@ -70,9 +101,10 @@ Dedicated auto-detection, build configuration, and container templates tailored 
 ### Phase 1: MVP Core (Current Target)
 - [ ] GitHub App integration (OAuth, Repo Listing, Webhook Receiver).
 - [ ] Framework Presets for **Laravel** & **Next.js** (Container templates & build specs).
-- [ ] UI `.env` Editor with **HashiCorp Vault** sync.
+- [x] Flat JSON Environment/Secret Editor with **HashiCorp Vault KV v2** sync and CAS conflict protection.
 - [ ] UI Manifest Builder (Deployment, Service, Ingress, Secret).
-- [ ] ArgoCD Application controller integration (Create, Sync, Status Check).
+- [x] Co-located and separate GitOps repository modes with read/write permission validation and idempotent manifest publishing.
+- [x] ArgoCD Application controller integration (Create, Sync, Status Check).
 
 ### Phase 2: Developer Experience & Multi-Tenancy
 - [ ] Ephemeral Preview Deployments for Pull Requests.

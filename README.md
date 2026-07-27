@@ -6,7 +6,7 @@ An open-source, self-hosted Kubernetes-native platform (Vercel alternative) desi
 
 - **Framework Presets**: First-class support for Laravel 13 (PHP 8.4) and Next.js (Node.js) applications with automated container build and runtime configurations.
 - **GitOps Automation**: Automated application sync, health status tracking, and rollback policies powered by ArgoCD.
-- **Secret Management**: Interactive `.env` key-value editor integrated directly with HashiCorp Vault (KV v2 engine) for secure secret injection.
+- **Secret Management**: Raw JSON environment/secret editor backed directly by HashiCorp Vault KV v2 with CAS conflict protection.
 - **No-Code Manifest Builder**: Pure Web UI for managing Kubernetes resources, custom domains, Ingress, and autoscaling (HPA).
 - **Multi-Tenancy & RBAC**: Organization and Team workspace isolation backed by Kubernetes Namespace policies.
 - **VMware Clarity Design**: Clean, crisp enterprise UI built with Livewire 4, Flux UI, and Tailwind CSS v4.
@@ -52,6 +52,8 @@ An open-source, self-hosted Kubernetes-native platform (Vercel alternative) desi
    php artisan key:generate
    ```
 
+   GitOps publishing requires a GitHub App installation with `Contents: Read and write` access. Configure Vault, Kubernetes, and Argo CD using the `VAULT_*`, `KUBERNETES_*`, and `ARGOCD_*` variables documented in `.env.example`.
+
 4. **Run Migrations and Seeders:**
    ```bash
    php artisan migrate --seed
@@ -78,6 +80,13 @@ vendor/bin/pint
 ```
 
 ## Architecture & Roadmap
+
+### Control-plane permissions
+
+- Vault is the only source of truth for environment variables. The configured token needs KV v2 read/create/update access under `<mount>/data/<team>/<project>/app`; secret values are never stored in the Dev Portal database or Git.
+- The Kubernetes credential used for Application reconciliation needs `create` and `patch` on `applications.argoproj.io` in the configured Argo CD namespace. Reconciliation uses Server-Side Apply with field manager `dev-portal`.
+- The Argo CD bearer token needs scoped `applications, get` and `applications, sync` permissions for the configured Argo project. Do not use the admin token.
+- Argo CD must have its own credentials for private Git repositories. Dev Portal does not copy GitHub App credentials into Argo CD.
 
 For detailed architectural guidelines, provider abstraction specs, and open-source roadmap, please refer to [PLAN.md](PLAN.md) and [AGENTS.md](AGENTS.md).
 

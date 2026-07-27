@@ -87,11 +87,17 @@ new #[Layout('layouts.app')] #[Title('Project Details')] class extends Component
         </div>
 
         <div class="flex items-center gap-2">
+            <flux:button variant="filled" icon="key" size="sm" class="cursor-pointer" :href="route('projects.secrets', ['project' => $project->slug])" wire:navigate>
+                {{ __('Secrets') }}
+            </flux:button>
+            <flux:button variant="filled" icon="folder-git-2" size="sm" class="cursor-pointer" :href="route('projects.gitops', ['project' => $project->slug])" wire:navigate>
+                {{ __('GitOps') }}
+            </flux:button>
             <flux:button variant="filled" icon="document-text" size="sm" class="cursor-pointer" :href="route('projects.manifests', ['project' => $project->slug])" wire:navigate>
                 {{ __('Manifests') }}
             </flux:button>
-            <flux:button variant="filled" icon="arrow-path" size="sm" class="cursor-pointer">
-                {{ __('Sync ArgoCD') }}
+            <flux:button variant="filled" icon="arrow-path" size="sm" class="cursor-pointer" :href="route('projects.argocd', ['project' => $project->slug])" wire:navigate>
+                {{ __('Argo CD') }}
             </flux:button>
             <flux:button variant="primary" icon="play" size="sm" class="cursor-pointer bg-blue-600 hover:bg-blue-700 dark:bg-blue-500">
                 {{ __('Deploy') }}
@@ -108,24 +114,24 @@ new #[Layout('layouts.app')] #[Title('Project Details')] class extends Component
     <!-- VMware Clarity Status Cards Grid -->
     <div class="grid gap-6 md:grid-cols-3">
         <!-- ArgoCD Status -->
-        <div class="rounded-md border border-slate-200 bg-white p-5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+        <a href="{{ route('projects.argocd', ['project' => $project->slug]) }}" wire:navigate class="block cursor-pointer rounded-md border border-slate-200 bg-white p-5 shadow-2xs transition hover:border-blue-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-700">
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                    <span class="size-2.5 rounded-full bg-emerald-500"></span>
+                    <span class="size-2.5 rounded-full bg-blue-500"></span>
                     <flux:heading size="md" class="font-medium text-slate-900 dark:text-slate-100">{{ __('ArgoCD GitOps') }}</flux:heading>
                 </div>
-                <flux:badge color="emerald" size="sm" class="font-mono text-2xs uppercase">HEALTHY</flux:badge>
+                <flux:badge color="blue" size="sm" class="font-mono text-2xs uppercase">CRD + REST</flux:badge>
             </div>
             <flux:text class="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                {{ __('Auto-sync enabled & active') }}
+                {{ __('Open live sync and health status') }}
             </flux:text>
             <div class="mt-4 rounded-md bg-slate-50 p-2.5 font-mono text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                App: {{ $project->slug }}-app
+                App: {{ $project->team->slug }}-{{ $project->slug }}
             </div>
-        </div>
+        </a>
 
         <!-- Vault Environment Variables -->
-        <div class="rounded-md border border-slate-200 bg-white p-5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+        <a href="{{ route('projects.secrets', ['project' => $project->slug]) }}" wire:navigate class="block cursor-pointer rounded-md border border-slate-200 bg-white p-5 shadow-2xs transition hover:border-amber-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-amber-700">
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
                     <flux:icon name="key" class="size-5 text-amber-500" />
@@ -137,9 +143,9 @@ new #[Layout('layouts.app')] #[Title('Project Details')] class extends Component
                 {{ __('HashiCorp Vault Secret Injection') }}
             </flux:text>
             <div class="mt-4 flex items-center justify-between font-mono text-2xs text-slate-400">
-                <span>secret/{{ $project->team->slug }}/{{ $project->slug }}</span>
+                <span>secret/{{ $project->team->slug }}/{{ $project->slug }}/app</span>
             </div>
-        </div>
+        </a>
 
         <!-- K8s Resources & Manifests -->
         <div class="rounded-md border border-slate-200 bg-white p-5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">

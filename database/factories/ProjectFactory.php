@@ -2,6 +2,8 @@
 
 namespace Database\Factories;
 
+use App\Enums\GitOpsPublishMode;
+use App\Enums\GitOpsRepositoryMode;
 use App\Enums\ProjectFramework;
 use App\Models\Project;
 use App\Models\Team;
@@ -28,6 +30,9 @@ class ProjectFactory extends Factory
             'slug' => Str::slug($name),
             'framework' => $this->faker?->randomElement([ProjectFramework::Laravel, ProjectFramework::NextJs, ProjectFramework::Other]) ?? ProjectFramework::Laravel,
             'repository' => ($this->faker?->userName() ?? 'org').'/'.Str::slug($name),
+            'gitops_repository_mode' => GitOpsRepositoryMode::CoLocated,
+            'gitops_path' => 'deploy/k8s',
+            'gitops_publish_mode' => GitOpsPublishMode::Direct,
             'description' => $this->faker?->sentence() ?? 'Project description',
         ];
     }

@@ -34,6 +34,9 @@ class ProjectManifestRevision extends Model
         'created_by',
         'published_at',
         'git_commit_sha',
+        'git_repository',
+        'git_branch',
+        'git_path',
     ];
 
     /**

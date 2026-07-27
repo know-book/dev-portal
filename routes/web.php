@@ -18,6 +18,9 @@ Route::prefix('{current_team}')
         Route::view('dashboard', 'dashboard')->name('dashboard');
         Route::livewire('projects', 'pages::projects.index')->name('projects.index');
         Route::livewire('projects/{project}/manifests', 'pages::projects.manifests')->name('projects.manifests');
+        Route::livewire('projects/{project}/gitops', 'pages::projects.gitops')->name('projects.gitops');
+        Route::livewire('projects/{project}/secrets', 'pages::projects.secrets')->name('projects.secrets');
+        Route::livewire('projects/{project}/argocd', 'pages::projects.argocd')->name('projects.argocd');
         Route::livewire('projects/{project}', 'pages::projects.show')->name('projects.show');
     });
 

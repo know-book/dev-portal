@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -17,7 +16,7 @@ use Illuminate\Support\Carbon;
  * @property string $account_name
  * @property string|null $account_avatar_url
  * @property string $account_type
- * @property array|null $permissions
+ * @property array<string, string>|null $permissions
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
@@ -26,7 +25,7 @@ use Illuminate\Support\Carbon;
 #[Fillable(['team_id', 'installation_id', 'account_name', 'account_avatar_url', 'account_type', 'permissions'])]
 class GitHubInstallation extends Model
 {
-    use HasFactory, SoftDeletes;
+    use SoftDeletes;
 
     /**
      * The table associated with the model.
@@ -53,6 +52,21 @@ class GitHubInstallation extends Model
     public function projects(): HasMany
     {
         return $this->hasMany(Project::class, 'github_installation_id');
+    }
+
+    /**
+     * Get projects using this installation for a separate GitOps repository.
+     *
+     * @return HasMany<Project, $this>
+     */
+    public function gitOpsProjects(): HasMany
+    {
+        return $this->hasMany(Project::class, 'gitops_github_installation_id');
+    }
+
+    public function canWriteRepositoryContents(): bool
+    {
+        return ($this->permissions['contents'] ?? null) === 'write';
     }
 
     /**

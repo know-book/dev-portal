@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Enums\GitOpsRepositoryMode;
 use App\Models\GitHubInstallation;
 use App\Models\Project;
 use App\Services\Kubernetes\K8sBuildEngineService;
@@ -98,9 +99,64 @@ class ProcessGitHubWebhookJob implements ShouldQueue
             ->get();
 
         foreach ($projects as $project) {
+            if ($this->isManifestOnlyPush($project)) {
+                Log::info("Skipping build for manifest-only GitOps commit on project [{$project->name}]");
+
+                continue;
+            }
+
             Log::info("Dispatching K8s Build Job for project [{$project->name}] (Branch: {$branch})");
             $buildEngine->dispatchBuildJob($project, $branch, $this->payload['after'] ?? 'head');
         }
+    }
+
+    protected function isManifestOnlyPush(Project $project): bool
+    {
+        if ($project->gitops_repository_mode !== GitOpsRepositoryMode::CoLocated) {
+            return false;
+        }
+
+        $commits = $this->payload['commits'] ?? [];
+
+        if (! is_array($commits)) {
+            return false;
+        }
+
+        $changedPaths = [];
+
+        foreach ($commits as $commit) {
+            if (! is_array($commit)) {
+                continue;
+            }
+
+            foreach (['added', 'modified', 'removed'] as $changeType) {
+                $paths = $commit[$changeType] ?? [];
+
+                if (! is_array($paths)) {
+                    continue;
+                }
+
+                foreach ($paths as $path) {
+                    if (is_string($path) && $path !== '') {
+                        $changedPaths[$path] = true;
+                    }
+                }
+            }
+        }
+
+        if ($changedPaths === []) {
+            return false;
+        }
+
+        $manifestPath = trim($project->gitops_path, '/');
+
+        foreach (array_keys($changedPaths) as $path) {
+            if ($path !== $manifestPath && ! str_starts_with($path, $manifestPath.'/')) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
