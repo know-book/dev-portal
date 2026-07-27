@@ -60,6 +60,7 @@ return [
         'verify_tls' => env('KUBERNETES_VERIFY_TLS', true),
         'connect_timeout' => env('KUBERNETES_CONNECT_TIMEOUT', 3),
         'timeout' => env('KUBERNETES_TIMEOUT', 10),
+        'external_secrets_api_version' => env('EXTERNAL_SECRETS_API_VERSION', 'v1'),
     ],
 
     'argocd' => [

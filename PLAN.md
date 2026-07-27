@@ -42,6 +42,7 @@ Dedicated auto-detection, build configuration, and container templates tailored 
 - **Operational API Integration**: Use the ArgoCD REST API for manual sync, hard refresh, resource trees, deployment history, and other operational actions.
 - **Real-Time Health & Log Streaming**: Real-time deployment status, pod health monitoring, and live container logging streamed directly to the Web UI via WebSockets/Server-Sent Events (SSE).
 - **Automated Rollback & Sync Policy**: UI-driven manual sync, auto-sync, prune policies, and instant rollbacks to previous git commit revisions.
+- **Guided Deployment Workflow**: A state-aware stepper walks operators through manifest preparation, Git publication, Vault secret verification, Argo CD Application reconciliation, Argo CD sync, and ExternalSecret readiness verification. Completed steps are derived from persisted or provider state rather than browser-only progress.
 
 ### 5. Pure UI Manifest Builder (No-Code K8s Abstraction)
 - **Zero-YAML Developer Experience**: Intuitive UI for configuring:
@@ -105,6 +106,7 @@ Every project selects one of the following repository modes. The compiled manife
 - [ ] UI Manifest Builder (Deployment, Service, Ingress, Secret).
 - [x] Co-located and separate GitOps repository modes with read/write permission validation and idempotent manifest publishing.
 - [x] ArgoCD Application controller integration (Create, Sync, Status Check).
+- [x] Guided deployment workflow with Vault metadata checks and ExternalSecret force-sync/readiness verification.
 
 ### Phase 2: Developer Experience & Multi-Tenancy
 - [ ] Ephemeral Preview Deployments for Pull Requests.

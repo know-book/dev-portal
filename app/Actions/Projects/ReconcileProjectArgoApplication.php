@@ -3,6 +3,7 @@
 namespace App\Actions\Projects;
 
 use App\Contracts\ArgoApplicationGateway;
+use App\Contracts\ProjectSecretStore;
 use App\Data\ArgoApplicationStatus;
 use App\Models\Project;
 use App\Models\ProjectManifestRevision;
@@ -12,7 +13,10 @@ use Illuminate\Validation\ValidationException;
 
 class ReconcileProjectArgoApplication
 {
-    public function __construct(private ArgoApplicationGateway $argo) {}
+    public function __construct(
+        private ArgoApplicationGateway $argo,
+        private ProjectSecretStore $secrets,
+    ) {}
 
     public function handle(Project $project, User $user): ArgoApplicationStatus
     {
@@ -28,6 +32,12 @@ class ReconcileProjectArgoApplication
         if (! $hasPublishedManifest) {
             throw ValidationException::withMessages([
                 'argo' => __('Publish the project manifests to Git before creating the Argo CD Application.'),
+            ]);
+        }
+
+        if (! $this->secrets->metadata($project)->exists) {
+            throw ValidationException::withMessages([
+                'argo' => __('Create the project secret in Vault before creating the Argo CD Application.'),
             ]);
         }
 

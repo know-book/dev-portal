@@ -2,6 +2,7 @@
 
 use App\Contracts\ProjectSecretStore;
 use App\Data\SecretDocument;
+use App\Data\SecretMetadata;
 use App\Exceptions\SecretVersionConflict;
 use App\Models\Project;
 use App\Models\User;
@@ -132,6 +133,14 @@ class FakeProjectSecretStore implements ProjectSecretStore
         $this->reads++;
 
         return $this->document;
+    }
+
+    public function metadata(Project $project): SecretMetadata
+    {
+        return new SecretMetadata(
+            exists: $this->document->version > 0,
+            version: $this->document->version,
+        );
     }
 
     public function write(Project $project, array $values, int $expectedVersion): SecretDocument

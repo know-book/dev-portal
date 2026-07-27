@@ -1,7 +1,10 @@
 <?php
 
 use App\Contracts\ArgoApplicationGateway;
+use App\Contracts\ProjectSecretStore;
 use App\Data\ArgoApplicationStatus;
+use App\Data\SecretDocument;
+use App\Data\SecretMetadata;
 use App\Models\Project;
 use App\Models\ProjectManifest;
 use App\Models\ProjectManifestRevision;
@@ -10,7 +13,9 @@ use Livewire\Livewire;
 
 beforeEach(function () {
     $this->argo = new FakeArgoApplicationGateway;
+    $this->secretStore = new ArgoTestSecretStore;
     app()->instance(ArgoApplicationGateway::class, $this->argo);
+    app()->instance(ProjectSecretStore::class, $this->secretStore);
 });
 
 test('argocd page does not call the control plane when it opens', function () {
@@ -54,6 +59,20 @@ test('team member can reconcile refresh and sync an argocd application', functio
 test('argocd reconciliation requires published manifests', function () {
     $user = User::factory()->create();
     $project = Project::factory()->create(['team_id' => $user->currentTeam->id]);
+
+    Livewire::actingAs($user)
+        ->test('pages::projects.argocd', ['project' => $project])
+        ->call('reconcile')
+        ->assertHasErrors(['argo']);
+
+    expect($this->argo->reconcileCalls)->toBe(0);
+});
+
+test('argocd reconciliation requires an existing vault secret', function () {
+    $user = User::factory()->create();
+    $project = Project::factory()->create(['team_id' => $user->currentTeam->id]);
+    publishedManifestFor($project, $user);
+    $this->secretStore->exists = false;
 
     Livewire::actingAs($user)
         ->test('pages::projects.argocd', ['project' => $project])
@@ -121,5 +140,25 @@ class FakeArgoApplicationGateway implements ArgoApplicationGateway
         $this->syncCalls++;
 
         return new ArgoApplicationStatus('application', 'Synced', 'Healthy', 'abcdef123456', 'Succeeded');
+    }
+}
+
+class ArgoTestSecretStore implements ProjectSecretStore
+{
+    public bool $exists = true;
+
+    public function read(Project $project): SecretDocument
+    {
+        return new SecretDocument([], $this->exists ? 1 : 0);
+    }
+
+    public function metadata(Project $project): SecretMetadata
+    {
+        return new SecretMetadata($this->exists, $this->exists ? 1 : 0);
+    }
+
+    public function write(Project $project, array $values, int $expectedVersion): SecretDocument
+    {
+        return new SecretDocument($values, $expectedVersion + 1);
     }
 }

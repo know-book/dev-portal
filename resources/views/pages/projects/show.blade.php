@@ -99,7 +99,7 @@ new #[Layout('layouts.app')] #[Title('Project Details')] class extends Component
             <flux:button variant="filled" icon="arrow-path" size="sm" class="cursor-pointer" :href="route('projects.argocd', ['project' => $project->slug])" wire:navigate>
                 {{ __('Argo CD') }}
             </flux:button>
-            <flux:button variant="primary" icon="play" size="sm" class="cursor-pointer bg-blue-600 hover:bg-blue-700 dark:bg-blue-500">
+            <flux:button variant="primary" icon="play" size="sm" class="cursor-pointer bg-blue-600 hover:bg-blue-700 dark:bg-blue-500" :href="route('projects.deploy', ['project' => $project->slug])" wire:navigate>
                 {{ __('Deploy') }}
             </flux:button>
 

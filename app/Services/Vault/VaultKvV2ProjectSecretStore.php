@@ -4,6 +4,7 @@ namespace App\Services\Vault;
 
 use App\Contracts\ProjectSecretStore;
 use App\Data\SecretDocument;
+use App\Data\SecretMetadata;
 use App\Exceptions\SecretStoreException;
 use App\Exceptions\SecretVersionConflict;
 use App\Models\Project;
@@ -17,7 +18,7 @@ class VaultKvV2ProjectSecretStore implements ProjectSecretStore
     public function read(Project $project): SecretDocument
     {
         try {
-            $response = $this->request()->get($this->endpoint($project));
+            $response = $this->request()->get($this->endpoint($project, 'data'));
 
             if ($response->status() === 404) {
                 return new SecretDocument([], 0);
@@ -33,11 +34,35 @@ class VaultKvV2ProjectSecretStore implements ProjectSecretStore
         }
     }
 
+    public function metadata(Project $project): SecretMetadata
+    {
+        try {
+            $response = $this->request()->get($this->endpoint($project, 'metadata'));
+
+            if ($response->status() === 404) {
+                return new SecretMetadata(exists: false, version: 0);
+            }
+
+            $response->throw();
+            $version = $response->json('data.current_version');
+
+            if (! is_int($version) && ! ctype_digit((string) $version)) {
+                throw new SecretStoreException('Vault returned invalid project secret metadata.');
+            }
+
+            return new SecretMetadata(exists: true, version: (int) $version);
+        } catch (SecretStoreException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            throw new SecretStoreException('Vault could not check this project secret.', previous: $exception);
+        }
+    }
+
     /** @param array<string, string> $values */
     public function write(Project $project, array $values, int $expectedVersion): SecretDocument
     {
         try {
-            $response = $this->request()->post($this->endpoint($project), [
+            $response = $this->request()->post($this->endpoint($project, 'data'), [
                 'options' => ['cas' => $expectedVersion],
                 'data' => (object) $values,
             ]);
@@ -87,7 +112,7 @@ class VaultKvV2ProjectSecretStore implements ProjectSecretStore
             ->withOptions(['verify' => (bool) config('services.vault.verify_tls', true)]);
     }
 
-    protected function endpoint(Project $project): string
+    protected function endpoint(Project $project, string $resource): string
     {
         $project->loadMissing('team');
         $mount = collect(explode('/', trim((string) config('services.vault.mount', 'secret'), '/')))
@@ -99,7 +124,7 @@ class VaultKvV2ProjectSecretStore implements ProjectSecretStore
             throw new SecretStoreException('Vault KV mount is not configured.');
         }
 
-        return 'v1/'.$mount.'/data/'.rawurlencode($project->team->slug).'/'.rawurlencode($project->slug).'/app';
+        return 'v1/'.$mount.'/'.rawurlencode($resource).'/'.rawurlencode($project->team->slug).'/'.rawurlencode($project->slug).'/app';
     }
 
     protected function documentFromResponse(Response $response): SecretDocument

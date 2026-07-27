@@ -21,6 +21,7 @@ Route::prefix('{current_team}')
         Route::livewire('projects/{project}/gitops', 'pages::projects.gitops')->name('projects.gitops');
         Route::livewire('projects/{project}/secrets', 'pages::projects.secrets')->name('projects.secrets');
         Route::livewire('projects/{project}/argocd', 'pages::projects.argocd')->name('projects.argocd');
+        Route::livewire('projects/{project}/deploy', 'pages::projects.deploy')->name('projects.deploy');
         Route::livewire('projects/{project}', 'pages::projects.show')->name('projects.show');
     });
 
