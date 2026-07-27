@@ -56,6 +56,7 @@ return [
     'kubernetes' => [
         'url' => env('KUBERNETES_API_URL'),
         'token' => env('KUBERNETES_API_TOKEN'),
+        'token_file' => env('KUBERNETES_API_TOKEN_FILE', '/var/run/secrets/kubernetes.io/serviceaccount/token'),
         'ca_cert' => env('KUBERNETES_CA_CERT'),
         'verify_tls' => env('KUBERNETES_VERIFY_TLS', true),
         'connect_timeout' => env('KUBERNETES_CONNECT_TIMEOUT', 3),

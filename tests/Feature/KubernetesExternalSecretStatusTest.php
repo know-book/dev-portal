@@ -59,6 +59,34 @@ test('external secret status reports a resource that has not been deployed', fun
         ->and($status->reason)->toBe('NotFound');
 });
 
+test('kubernetes requests use the projected service account token file', function () {
+    $project = projectWithExternalSecretIdentity();
+    $tokenFile = tempnam(sys_get_temp_dir(), 'kubernetes-api-token-');
+
+    if ($tokenFile === false) {
+        throw new RuntimeException('Unable to create a temporary Kubernetes token file.');
+    }
+
+    file_put_contents($tokenFile, "projected-token\n");
+    config([
+        'services.kubernetes.token' => '',
+        'services.kubernetes.token_file' => $tokenFile,
+    ]);
+
+    Http::fake(['kubernetes.test/*' => Http::response([], 404)]);
+
+    try {
+        app(KubernetesExternalSecretClient::class)->status($project);
+
+        Http::assertSent(fn (Request $request): bool => $request->hasHeader(
+            'Authorization',
+            'Bearer projected-token',
+        ));
+    } finally {
+        unlink($tokenFile);
+    }
+});
+
 test('external secret refresh patches the force-sync annotation', function () {
     $project = projectWithExternalSecretIdentity();
 

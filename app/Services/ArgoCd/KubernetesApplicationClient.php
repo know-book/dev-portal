@@ -3,6 +3,7 @@
 namespace App\Services\ArgoCd;
 
 use App\Exceptions\ArgoCdException;
+use App\Services\Kubernetes\KubernetesApiToken;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use JsonException;
@@ -10,6 +11,8 @@ use Throwable;
 
 class KubernetesApplicationClient
 {
+    public function __construct(private KubernetesApiToken $apiToken) {}
+
     /**
      * @param  array<string, mixed>  $application
      * @return array<string, mixed>
@@ -54,10 +57,13 @@ class KubernetesApplicationClient
     protected function request(): PendingRequest
     {
         $url = rtrim((string) config('services.kubernetes.url'), '/');
-        $token = (string) config('services.kubernetes.token');
+        $token = $this->apiToken->resolve(
+            configuredToken: (string) config('services.kubernetes.token'),
+            tokenFile: (string) config('services.kubernetes.token_file'),
+        );
 
         if ($url === '' || $token === '') {
-            throw new ArgoCdException('The Kubernetes API is not configured for this environment.');
+            throw new ArgoCdException('The Kubernetes API is not configured. Set KUBERNETES_API_URL and either KUBERNETES_API_TOKEN or KUBERNETES_API_TOKEN_FILE.');
         }
 
         $caCertificate = (string) config('services.kubernetes.ca_cert');

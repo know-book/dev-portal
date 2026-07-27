@@ -13,6 +13,8 @@ use Throwable;
 
 class KubernetesExternalSecretClient
 {
+    public function __construct(private KubernetesApiToken $apiToken) {}
+
     public function status(Project $project): ExternalSecretStatus
     {
         try {
@@ -128,10 +130,13 @@ class KubernetesExternalSecretClient
     protected function request(): PendingRequest
     {
         $url = rtrim((string) config('services.kubernetes.url'), '/');
-        $token = (string) config('services.kubernetes.token');
+        $token = $this->apiToken->resolve(
+            configuredToken: (string) config('services.kubernetes.token'),
+            tokenFile: (string) config('services.kubernetes.token_file'),
+        );
 
         if ($url === '' || $token === '') {
-            throw new KubernetesResourceException('The Kubernetes API is not configured for this environment.');
+            throw new KubernetesResourceException('The Kubernetes API is not configured. Set KUBERNETES_API_URL and either KUBERNETES_API_TOKEN or KUBERNETES_API_TOKEN_FILE.');
         }
 
         $caCertificate = (string) config('services.kubernetes.ca_cert');
