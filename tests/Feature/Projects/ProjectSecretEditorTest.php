@@ -21,9 +21,36 @@ test('secret values are not loaded when the editor opens', function () {
     Livewire::actingAs($user)
         ->test('pages::projects.secrets', ['project' => $project])
         ->assertSet('revealed', false)
+        ->assertSet('secretExists', true)
         ->assertDontSee('hunter2');
 
-    expect($this->secretStore->reads)->toBe(0);
+    expect($this->secretStore->metadataReads)->toBe(1)
+        ->and($this->secretStore->reads)->toBe(0);
+});
+
+test('missing vault secret opens a blank create editor and saves with cas zero', function () {
+    $user = User::factory()->create();
+    $project = Project::factory()->create(['team_id' => $user->currentTeam->id]);
+
+    Livewire::actingAs($user)
+        ->test('pages::projects.secrets', ['project' => $project])
+        ->assertSet('revealed', true)
+        ->assertSet('secretExists', false)
+        ->assertSet('secretVersion', 0)
+        ->assertSee('New Vault secret')
+        ->assertSee('Create in Vault')
+        ->assertDontSee('Reveal from Vault')
+        ->set('secretJson', '{"APP_KEY":"new-key"}')
+        ->call('save')
+        ->assertHasNoErrors()
+        ->assertSet('secretExists', true)
+        ->assertSet('secretVersion', 1)
+        ->assertSee('Save to Vault');
+
+    expect($this->secretStore->metadataReads)->toBe(1)
+        ->and($this->secretStore->reads)->toBe(0)
+        ->and($this->secretStore->writes)->toBe(1)
+        ->and($this->secretStore->lastExpectedVersion)->toBe(0);
 });
 
 test('team member can reveal and save a flat json secret with vault cas', function () {
@@ -62,7 +89,6 @@ test('secret editor rejects json that is not a flat string object', function (st
 
     Livewire::actingAs($user)
         ->test('pages::projects.secrets', ['project' => $project])
-        ->call('reveal')
         ->set('secretJson', $json)
         ->call('save')
         ->assertHasErrors(['secretJson']);
@@ -114,6 +140,8 @@ class FakeProjectSecretStore implements ProjectSecretStore
 
     public int $reads = 0;
 
+    public int $metadataReads = 0;
+
     public int $writes = 0;
 
     public int $lastExpectedVersion = -1;
@@ -137,6 +165,8 @@ class FakeProjectSecretStore implements ProjectSecretStore
 
     public function metadata(Project $project): SecretMetadata
     {
+        $this->metadataReads++;
+
         return new SecretMetadata(
             exists: $this->document->version > 0,
             version: $this->document->version,

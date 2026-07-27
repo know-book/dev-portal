@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Projects\GetProjectSecretMetadata;
 use App\Actions\Projects\ReadProjectSecrets;
 use App\Actions\Projects\UpdateProjectSecrets;
 use App\Exceptions\SecretStoreException;
@@ -25,13 +26,29 @@ new #[Layout('layouts.app')] #[Title('Project Secrets')] class extends Component
 
     public bool $revealed = false;
 
-    public function mount(Project $project): void
+    public ?bool $secretExists = null;
+
+    public function mount(Project $project, GetProjectSecretMetadata $getMetadata): void
     {
         $team = Auth::user()->currentTeam;
 
         abort_if($project->team_id !== $team->id, 404);
 
         $this->project = $project->loadMissing('team');
+
+        try {
+            $metadata = $getMetadata->handle($this->project, Auth::user());
+        } catch (SecretStoreException $exception) {
+            $this->addError('secretJson', $exception->getMessage());
+
+            return;
+        }
+
+        $this->secretExists = $metadata->exists;
+
+        if (! $metadata->exists) {
+            $this->revealed = true;
+        }
     }
 
     public function reveal(ReadProjectSecrets $readSecrets): void
@@ -51,6 +68,7 @@ new #[Layout('layouts.app')] #[Title('Project Secrets')] class extends Component
 
         $this->secretVersion = $document->version;
         $this->secretCount = count($document->values);
+        $this->secretExists = $document->version > 0;
         $this->revealed = true;
     }
 
@@ -99,6 +117,7 @@ new #[Layout('layouts.app')] #[Title('Project Secrets')] class extends Component
         $this->secretJson = $this->formatJson($document->values);
         $this->secretVersion = $document->version;
         $this->secretCount = count($document->values);
+        $this->secretExists = true;
 
         Flux::toast(variant: 'success', text: __('Vault secret version :version saved.', ['version' => $document->version]));
     }
@@ -172,11 +191,13 @@ new #[Layout('layouts.app')] #[Title('Project Secrets')] class extends Component
 
         <div class="flex items-center gap-2">
             @if ($revealed)
-                <flux:button variant="filled" icon="eye-slash" wire:click="hideSecrets" class="cursor-pointer">
-                    {{ __('Hide') }}
-                </flux:button>
+                @if ($secretExists)
+                    <flux:button variant="filled" icon="eye-slash" wire:click="hideSecrets" class="cursor-pointer">
+                        {{ __('Hide') }}
+                    </flux:button>
+                @endif
                 <flux:button variant="primary" icon="cloud-arrow-up" wire:click="save" wire:loading.attr="disabled" wire:target="save" class="cursor-pointer bg-blue-600 hover:bg-blue-700 dark:bg-blue-500">
-                    <span wire:loading.remove wire:target="save">{{ __('Save to Vault') }}</span>
+                    <span wire:loading.remove wire:target="save">{{ $secretExists ? __('Save to Vault') : __('Create in Vault') }}</span>
                     <span wire:loading wire:target="save">{{ __('Saving...') }}</span>
                 </flux:button>
             @else
@@ -198,13 +219,22 @@ new #[Layout('layouts.app')] #[Title('Project Secrets')] class extends Component
                 @if ($revealed)
                     <div class="flex items-center gap-2">
                         <flux:badge color="zinc" size="sm" class="font-mono">{{ $secretCount }} {{ __('keys') }}</flux:badge>
-                        <flux:badge color="blue" size="sm" class="font-mono">v{{ $secretVersion }}</flux:badge>
+                        @if ($secretExists)
+                            <flux:badge color="blue" size="sm" class="font-mono">v{{ $secretVersion }}</flux:badge>
+                        @else
+                            <flux:badge color="amber" size="sm" class="font-mono uppercase">{{ __('New') }}</flux:badge>
+                        @endif
                     </div>
                 @endif
             </div>
 
             <div class="p-5">
                 @if ($revealed)
+                    @if (! $secretExists)
+                        <flux:callout variant="warning" heading="{{ __('New Vault secret') }}" class="mb-4">
+                            <flux:text>{{ __('This Vault path does not exist yet. Enter a flat JSON object, then select Create in Vault.') }}</flux:text>
+                        </flux:callout>
+                    @endif
                     <flux:textarea
                         wire:model="secretJson"
                         rows="28"
