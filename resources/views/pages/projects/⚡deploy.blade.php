@@ -161,12 +161,12 @@ new #[Layout('layouts.app')] #[Title('Deploy Project')] class extends Component 
 
     public function syncArgo(SyncProjectArgoApplication $sync): void
     {
-        $this->resetErrorBag('argo');
+        $this->resetErrorBag('argoSync');
 
         try {
             $status = $sync->handle($this->project, Auth::user());
         } catch (ArgoCdException $exception) {
-            $this->addError('argo', $exception->getMessage());
+            $this->addError('argoSync', $exception->getMessage());
 
             return;
         }
@@ -433,6 +433,7 @@ new #[Layout('layouts.app')] #[Title('Deploy Project')] class extends Component 
                                 <flux:badge color="{{ $argoHealthStatus === 'Healthy' ? 'emerald' : 'zinc' }}" size="sm" class="font-mono text-2xs uppercase">{{ $argoHealthStatus }}</flux:badge>
                             </div>
                             <flux:text class="mt-1 text-xs text-slate-500">{{ __('Ask Argo CD to reconcile the published Git revision with the target cluster.') }}</flux:text>
+                            <flux:error name="argoSync" />
                         </div>
                     </div>
                     <flux:button variant="primary" icon="play" wire:click="syncArgo" wire:loading.attr="disabled" wire:target="syncArgo" :disabled="$argoState !== 'exists'" class="cursor-pointer bg-blue-600 hover:bg-blue-700 dark:bg-blue-500">{{ __('Sync') }}</flux:button>

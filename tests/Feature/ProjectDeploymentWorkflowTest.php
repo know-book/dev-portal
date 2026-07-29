@@ -11,6 +11,7 @@ use App\Data\GitOpsTarget;
 use App\Data\SecretDocument;
 use App\Data\SecretMetadata;
 use App\Enums\ProjectFramework;
+use App\Exceptions\ArgoCdException;
 use App\Models\GitHubInstallation;
 use App\Models\Project;
 use App\Models\User;
@@ -101,6 +102,24 @@ test('deployment workflow blocks argo application creation until vault secret ex
         ->assertHasErrors(['argo']);
 
     expect($this->argo->reconcileCalls)->toBe(0);
+});
+
+test('deployment workflow displays synchronization failures in step five', function () {
+    [$user, $project] = deploymentProject();
+
+    $this->secretStore->exists = true;
+    $this->argo->syncFailure = 'Argo CD rejected the synchronization request.';
+
+    Livewire::actingAs($user)
+        ->test('pages::projects.deploy', ['project' => $project])
+        ->call('publish')
+        ->call('checkVault')
+        ->call('reconcileArgo')
+        ->assertSee('Step 5 of 6')
+        ->call('syncArgo')
+        ->assertHasErrors(['argoSync'])
+        ->assertHasNoErrors(['argo'])
+        ->assertSee('Argo CD rejected the synchronization request.');
 });
 
 test('project show deploy button opens the deployment workflow', function () {
@@ -197,6 +216,8 @@ class WorkflowArgoGateway implements ArgoApplicationGateway
 
     public int $syncCalls = 0;
 
+    public ?string $syncFailure = null;
+
     public function reconcile(Project $project): ArgoApplicationStatus
     {
         $this->reconcileCalls++;
@@ -214,6 +235,10 @@ class WorkflowArgoGateway implements ArgoApplicationGateway
     public function sync(Project $project): ArgoApplicationStatus
     {
         $this->syncCalls++;
+
+        if ($this->syncFailure !== null) {
+            throw new ArgoCdException($this->syncFailure);
+        }
 
         return new ArgoApplicationStatus('workflow-app', 'Synced', 'Healthy');
     }
