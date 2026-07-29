@@ -89,9 +89,52 @@ new #[Layout('layouts.app')] #[Title('Docker CI')] class extends Component {
 
     public function canImport(): bool
     {
-        return filled($this->project->repository)
-            && $this->project->githubInstallation?->canWriteRepositoryContents() === true
-            && $this->project->githubInstallation?->canWriteRepositoryWorkflows() === true;
+        return collect($this->importRequirements)
+            ->every(fn (array $requirement): bool => $requirement['ready']);
+    }
+
+    /**
+     * @return list<array{key: string, label: string, ready: bool, message: string}>
+     */
+    #[Computed]
+    public function importRequirements(): array
+    {
+        $installation = $this->project->githubInstallation;
+
+        return [
+            [
+                'key' => 'repository',
+                'label' => __('Source repository'),
+                'ready' => filled($this->project->repository),
+                'message' => filled($this->project->repository)
+                    ? __('Configured as :repository.', ['repository' => $this->project->repository])
+                    : __('Select a source repository for this project.'),
+            ],
+            [
+                'key' => 'installation',
+                'label' => __('GitHub App installation'),
+                'ready' => $installation !== null,
+                'message' => $installation
+                    ? __('Connected as :account.', ['account' => $installation->account_name])
+                    : __('Connect the source repository through a GitHub App installation.'),
+            ],
+            [
+                'key' => 'contents',
+                'label' => __('Contents: Read and write'),
+                'ready' => $installation?->canWriteRepositoryContents() === true,
+                'message' => $installation?->canWriteRepositoryContents() === true
+                    ? __('Dev Portal can commit Docker files to the repository.')
+                    : __('Enable the Contents repository permission with Read and write access.'),
+            ],
+            [
+                'key' => 'workflows',
+                'label' => __('Workflows: Read and write'),
+                'ready' => $installation?->canWriteRepositoryWorkflows() === true,
+                'message' => $installation?->canWriteRepositoryWorkflows() === true
+                    ? __('Dev Portal can create and update files under .github/workflows.')
+                    : __('Enable the Workflows repository permission with Read and write access, then approve the updated installation permissions.'),
+            ],
+        ];
     }
 };
 ?>
@@ -201,8 +244,31 @@ new #[Layout('layouts.app')] #[Title('Docker CI')] class extends Component {
             </div>
 
             @if (! $this->canImport())
-                <flux:callout variant="warning" icon="key" heading="{{ __('GitHub App permissions required') }}">
-                    {{ __('Connect the source repository with Contents and Workflows read/write permissions.') }}
+                <flux:callout variant="warning" icon="key" heading="{{ __('Import unavailable') }}">
+                    <div class="space-y-3">
+                        <flux:text class="text-sm">{{ __('Complete every requirement below to enable Import to Repository.') }}</flux:text>
+
+                        <div class="space-y-2">
+                            @foreach ($this->importRequirements as $requirement)
+                                <div wire:key="docker-import-requirement-{{ $requirement['key'] }}" class="flex items-start gap-2 rounded-md border border-amber-200 bg-white/70 p-2.5 dark:border-amber-900 dark:bg-slate-900/60">
+                                    <flux:icon name="{{ $requirement['ready'] ? 'check-circle' : 'x-circle' }}" class="mt-0.5 size-4 shrink-0 {{ $requirement['ready'] ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400' }}" />
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs font-semibold text-slate-800 dark:text-slate-200">{{ $requirement['label'] }}</span>
+                                            <flux:badge color="{{ $requirement['ready'] ? 'emerald' : 'red' }}" size="sm" class="font-mono text-2xs uppercase">
+                                                {{ $requirement['ready'] ? __('Ready') : __('Missing') }}
+                                            </flux:badge>
+                                        </div>
+                                        <flux:text class="mt-0.5 text-xs text-slate-600 dark:text-slate-400">{{ $requirement['message'] }}</flux:text>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        <flux:button variant="filled" size="sm" icon="cog" :href="route('settings.github')" wire:navigate class="cursor-pointer">
+                            {{ __('Open GitHub App Settings') }}
+                        </flux:button>
+                    </div>
                 </flux:callout>
             @else
                 <flux:callout icon="folder-git-2" heading="{{ __('Safe repository writes') }}">

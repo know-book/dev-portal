@@ -218,6 +218,36 @@ test('source publisher refuses to overwrite unmanaged Docker files', function ()
     ))->toThrow(SourceRepositoryException::class, 'already exists and is not managed');
 });
 
+test('Docker page identifies the missing GitHub App permission', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+    $installation = GitHubInstallation::create([
+        'team_id' => $team->id,
+        'installation_id' => '9009',
+        'account_name' => 'acme',
+        'account_type' => 'Organization',
+        'permissions' => ['contents' => 'write', 'workflows' => 'read'],
+    ]);
+    $project = Project::factory()->create([
+        'team_id' => $team->id,
+        'github_installation_id' => $installation->id,
+        'repository' => 'acme/portal',
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::projects.docker', ['project' => $project])
+        ->assertSee('Import unavailable')
+        ->assertSee('Source repository')
+        ->assertSee('Configured as acme/portal.')
+        ->assertSee('GitHub App installation')
+        ->assertSee('Connected as acme.')
+        ->assertSee('Contents: Read and write')
+        ->assertSee('Dev Portal can commit Docker files to the repository.')
+        ->assertSee('Workflows: Read and write')
+        ->assertSee('Enable the Workflows repository permission with Read and write access, then approve the updated installation permissions.')
+        ->assertSee('Open GitHub App Settings');
+});
+
 test('Docker page defaults to the project framework and blocks other teams', function () {
     $user = User::factory()->create();
     $otherUser = User::factory()->create();
