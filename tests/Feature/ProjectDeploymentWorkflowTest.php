@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Projects\CreateProject;
+use App\Actions\Projects\PublishProjectManifests;
 use App\Contracts\ArgoApplicationGateway;
 use App\Contracts\GitOpsRepositoryPublisher;
 use App\Contracts\ProjectSecretStore;
@@ -8,6 +9,7 @@ use App\Data\ArgoApplicationStatus;
 use App\Data\ExternalSecretStatus;
 use App\Data\GitOpsPublication;
 use App\Data\GitOpsTarget;
+use App\Data\KubernetesDeploymentStatus;
 use App\Data\SecretDocument;
 use App\Data\SecretMetadata;
 use App\Enums\ProjectFramework;
@@ -15,6 +17,7 @@ use App\Exceptions\ArgoCdException;
 use App\Models\GitHubInstallation;
 use App\Models\Project;
 use App\Models\User;
+use App\Services\Kubernetes\KubernetesDeploymentClient;
 use App\Services\Kubernetes\KubernetesExternalSecretClient;
 use Livewire\Livewire;
 
@@ -23,11 +26,13 @@ beforeEach(function () {
     $this->secretStore = new WorkflowSecretStore;
     $this->argo = new WorkflowArgoGateway;
     $this->externalSecrets = new WorkflowExternalSecretClient;
+    $this->deployments = new WorkflowDeploymentClient;
 
     app()->instance(GitOpsRepositoryPublisher::class, $this->publisher);
     app()->instance(ProjectSecretStore::class, $this->secretStore);
     app()->instance(ArgoApplicationGateway::class, $this->argo);
     app()->instance(KubernetesExternalSecretClient::class, $this->externalSecrets);
+    app()->instance(KubernetesDeploymentClient::class, $this->deployments);
 });
 
 test('deployment workflow advances only from verified source-system states', function () {
@@ -102,6 +107,49 @@ test('deployment workflow blocks argo application creation until vault secret ex
         ->assertHasErrors(['argo']);
 
     expect($this->argo->reconcileCalls)->toBe(0);
+});
+
+test('deployment workflow restores verified remote states when the page refreshes', function () {
+    [$user, $project] = deploymentProject();
+
+    app(PublishProjectManifests::class)->handle($project, $user);
+    $this->secretStore->exists = true;
+    $this->secretStore->version = 4;
+    $this->argo->status = new ArgoApplicationStatus('workflow-app', 'Synced', 'Healthy', 'deployed-revision');
+    $this->externalSecrets->status = new ExternalSecretStatus(
+        exists: true,
+        ready: true,
+        reason: 'SecretSynced',
+        message: 'Secret was synced',
+    );
+    $this->deployments->status = [
+        new KubernetesDeploymentStatus(
+            name: 'workflow-app',
+            desiredReplicas: 1,
+            readyReplicas: 1,
+            availableReplicas: 1,
+            updatedReplicas: 1,
+            images: ['ghcr.io/acme/workflow-app/app:sha-1234567'],
+        ),
+    ];
+
+    Livewire::actingAs($user)
+        ->test('pages::projects.deploy', ['project' => $project->refresh()])
+        ->assertSet('vaultState', 'exists')
+        ->assertSet('vaultVersion', 4)
+        ->assertSet('argoState', 'exists')
+        ->assertSet('argoSyncStatus', 'Synced')
+        ->assertSet('externalSecretState', 'ready')
+        ->assertSet('deploymentState', 'ready')
+        ->assertSee('Deployment workflow complete')
+        ->assertSee('workflow-app')
+        ->assertSee('1/1 ready')
+        ->assertSee('Edit Deployment');
+
+    expect($this->secretStore->metadataReads)->toBe(1)
+        ->and($this->argo->statusCalls)->toBe(1)
+        ->and($this->externalSecrets->statusCalls)->toBe(1)
+        ->and($this->deployments->statusCalls)->toBe(1);
 });
 
 test('deployment workflow displays synchronization failures in step five', function () {
@@ -218,6 +266,13 @@ class WorkflowArgoGateway implements ArgoApplicationGateway
 
     public ?string $syncFailure = null;
 
+    public ArgoApplicationStatus $status;
+
+    public function __construct()
+    {
+        $this->status = new ArgoApplicationStatus('workflow-app', 'OutOfSync', 'Progressing');
+    }
+
     public function reconcile(Project $project): ArgoApplicationStatus
     {
         $this->reconcileCalls++;
@@ -229,7 +284,7 @@ class WorkflowArgoGateway implements ArgoApplicationGateway
     {
         $this->statusCalls++;
 
-        return new ArgoApplicationStatus('workflow-app', 'OutOfSync', 'Progressing');
+        return $this->status;
     }
 
     public function sync(Project $project): ArgoApplicationStatus
@@ -267,6 +322,23 @@ class WorkflowExternalSecretClient extends KubernetesExternalSecretClient
     public function refresh(Project $project): ExternalSecretStatus
     {
         $this->refreshCalls++;
+
+        return $this->status;
+    }
+}
+
+class WorkflowDeploymentClient extends KubernetesDeploymentClient
+{
+    public int $statusCalls = 0;
+
+    /** @var list<KubernetesDeploymentStatus> */
+    public array $status = [];
+
+    public function __construct() {}
+
+    public function status(Project $project): array
+    {
+        $this->statusCalls++;
 
         return $this->status;
     }

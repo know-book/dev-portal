@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Projects\GetProjectArgoStatus;
+use App\Actions\Projects\GetProjectDeploymentStatus;
 use App\Actions\Projects\GetProjectExternalSecretStatus;
 use App\Actions\Projects\GetProjectSecretMetadata;
 use App\Actions\Projects\PublishProjectManifests;
@@ -9,6 +10,7 @@ use App\Actions\Projects\RefreshProjectExternalSecret;
 use App\Actions\Projects\SyncProjectArgoApplication;
 use App\Data\ArgoApplicationStatus;
 use App\Data\ExternalSecretStatus;
+use App\Data\KubernetesDeploymentStatus;
 use App\Exceptions\ArgoCdException;
 use App\Exceptions\GitOpsRepositoryException;
 use App\Exceptions\KubernetesResourceException;
@@ -54,6 +56,13 @@ new #[Layout('layouts.app')] #[Title('Deploy Project')] class extends Component 
 
     public ?string $externalSecretRefreshTime = null;
 
+    public string $deploymentState = 'unchecked';
+
+    /** @var list<array{name: string, desired_replicas: int, ready_replicas: int, available_replicas: int, updated_replicas: int, images: list<string>, message: string|null, ready: bool}> */
+    public array $deployments = [];
+
+    public ?string $deploymentMessage = null;
+
     protected ManifestCompiler $compiler;
 
     public function boot(ManifestCompiler $compiler): void
@@ -61,7 +70,13 @@ new #[Layout('layouts.app')] #[Title('Deploy Project')] class extends Component 
         $this->compiler = $compiler;
     }
 
-    public function mount(Project $project): void
+    public function mount(
+        Project $project,
+        GetProjectSecretMetadata $getSecretMetadata,
+        GetProjectArgoStatus $getArgoStatus,
+        GetProjectExternalSecretStatus $getExternalSecretStatus,
+        GetProjectDeploymentStatus $getDeploymentStatus,
+    ): void
     {
         $team = Auth::user()->currentTeam;
 
@@ -69,6 +84,7 @@ new #[Layout('layouts.app')] #[Title('Deploy Project')] class extends Component 
 
         $this->project = $project;
         $this->refreshLocalState();
+        $this->restoreRemoteState($getSecretMetadata, $getArgoStatus, $getExternalSecretStatus, $getDeploymentStatus);
     }
 
     public function publish(PublishProjectManifests $publishManifests): void
@@ -104,6 +120,11 @@ new #[Layout('layouts.app')] #[Title('Deploy Project')] class extends Component 
 
     public function checkVault(GetProjectSecretMetadata $getMetadata): void
     {
+        $this->loadVaultState($getMetadata);
+    }
+
+    protected function loadVaultState(GetProjectSecretMetadata $getMetadata): void
+    {
         $this->resetErrorBag('vault');
 
         try {
@@ -137,10 +158,15 @@ new #[Layout('layouts.app')] #[Title('Deploy Project')] class extends Component 
 
     public function refreshArgo(GetProjectArgoStatus $getStatus): void
     {
+        $this->loadArgoState($getStatus, hardRefresh: true);
+    }
+
+    protected function loadArgoState(GetProjectArgoStatus $getStatus, bool $hardRefresh): void
+    {
         $this->resetErrorBag('argo');
 
         try {
-            $status = $getStatus->handle($this->project, Auth::user(), hardRefresh: true);
+            $status = $getStatus->handle($this->project, Auth::user(), hardRefresh: $hardRefresh);
         } catch (ArgoCdException $exception) {
             $this->argoState = 'error';
             $this->addError('argo', $exception->getMessage());
@@ -177,6 +203,11 @@ new #[Layout('layouts.app')] #[Title('Deploy Project')] class extends Component 
 
     public function checkExternalSecret(GetProjectExternalSecretStatus $getStatus): void
     {
+        $this->loadExternalSecretState($getStatus);
+    }
+
+    protected function loadExternalSecretState(GetProjectExternalSecretStatus $getStatus): void
+    {
         $this->resetErrorBag('externalSecret');
 
         try {
@@ -206,6 +237,42 @@ new #[Layout('layouts.app')] #[Title('Deploy Project')] class extends Component 
 
         $this->applyExternalSecretStatus($status);
         Flux::toast(variant: 'success', text: __('External Secrets Operator refresh requested.'));
+    }
+
+    public function checkDeployments(GetProjectDeploymentStatus $getStatus): void
+    {
+        $this->loadDeploymentState($getStatus);
+    }
+
+    protected function loadDeploymentState(GetProjectDeploymentStatus $getStatus): void
+    {
+        $this->resetErrorBag('deployments');
+
+        try {
+            $deployments = $getStatus->handle($this->project, Auth::user());
+        } catch (KubernetesResourceException $exception) {
+            $this->deploymentState = 'error';
+            $this->deployments = [];
+            $this->deploymentMessage = null;
+            $this->addError('deployments', $exception->getMessage());
+
+            return;
+        }
+
+        $this->deployments = array_map(
+            fn (KubernetesDeploymentStatus $deployment): array => $deployment->toArray(),
+            $deployments,
+        );
+        $this->deploymentState = match (true) {
+            $this->deployments === [] => 'missing',
+            collect($this->deployments)->every(fn (array $deployment): bool => $deployment['ready']) => 'ready',
+            default => 'progressing',
+        };
+        $this->deploymentMessage = match ($this->deploymentState) {
+            'ready' => __('All project Deployments are available.'),
+            'progressing' => __('One or more project Deployments are still progressing.'),
+            default => __('No Deployment resources were found in the project namespace.'),
+        };
     }
 
     #[Computed]
@@ -290,6 +357,38 @@ new #[Layout('layouts.app')] #[Title('Deploy Project')] class extends Component 
         $this->publishedCommit = $this->manifestsPublished
             ? $publication?->git_commit_sha
             : null;
+    }
+
+    protected function restoreRemoteState(
+        GetProjectSecretMetadata $getSecretMetadata,
+        GetProjectArgoStatus $getArgoStatus,
+        GetProjectExternalSecretStatus $getExternalSecretStatus,
+        GetProjectDeploymentStatus $getDeploymentStatus,
+    ): void
+    {
+        if (! $this->manifestsPublished) {
+            return;
+        }
+
+        $this->loadVaultState($getSecretMetadata);
+
+        if ($this->vaultState !== 'exists') {
+            return;
+        }
+
+        $this->loadArgoState($getArgoStatus, hardRefresh: false);
+
+        if ($this->argoState !== 'exists') {
+            return;
+        }
+
+        $this->loadDeploymentState($getDeploymentStatus);
+
+        if ($this->argoSyncStatus !== 'Synced') {
+            return;
+        }
+
+        $this->loadExternalSecretState($getExternalSecretStatus);
     }
 
     protected function applyArgoStatus(ArgoApplicationStatus $status): void
@@ -499,6 +598,62 @@ new #[Layout('layouts.app')] #[Title('Deploy Project')] class extends Component 
                         <dd class="mt-0.5 break-all font-mono text-slate-700 dark:text-slate-300">{{ config('services.vault.mount', 'secret') }}/{{ $project->team->slug }}/{{ $project->slug }}/app</dd>
                     </div>
                 </dl>
+            </div>
+
+            <div class="rounded-md border border-slate-200 bg-white p-5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                <div class="flex items-center justify-between gap-3">
+                    <flux:heading size="sm">{{ __('Live Deployments') }}</flux:heading>
+                    <flux:badge
+                        color="{{ $deploymentState === 'ready' ? 'emerald' : ($deploymentState === 'progressing' ? 'amber' : ($deploymentState === 'error' ? 'red' : 'zinc')) }}"
+                        size="sm"
+                        class="font-mono text-2xs uppercase"
+                    >
+                        {{ $deploymentState }}
+                    </flux:badge>
+                </div>
+
+                <flux:text class="mt-2 text-xs text-slate-500">{{ $deploymentMessage ?? __('Read live replica and image status from the project namespace.') }}</flux:text>
+
+                <div class="mt-4 space-y-3">
+                    @foreach ($deployments as $deployment)
+                        <div wire:key="deployment-status-{{ $deployment['name'] }}" class="rounded-md border border-slate-200 p-3 dark:border-slate-800">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="truncate font-mono text-xs font-semibold text-slate-800 dark:text-slate-200">{{ $deployment['name'] }}</span>
+                                <flux:badge color="{{ $deployment['ready'] ? 'emerald' : 'amber' }}" size="sm" class="font-mono text-2xs">
+                                    {{ $deployment['ready_replicas'] }}/{{ $deployment['desired_replicas'] }} ready
+                                </flux:badge>
+                            </div>
+                            @foreach ($deployment['images'] as $image)
+                                <div class="mt-2 break-all font-mono text-2xs text-slate-500">{{ $image }}</div>
+                            @endforeach
+                            @if ($deployment['message'] && ! $deployment['ready'])
+                                <flux:text class="mt-2 text-xs text-amber-700 dark:text-amber-300">{{ $deployment['message'] }}</flux:text>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+
+                <flux:error name="deployments" />
+
+                <div class="mt-4 flex flex-wrap gap-2">
+                    <flux:button variant="filled" size="sm" icon="arrow-path" wire:click="checkDeployments" wire:loading.attr="disabled" wire:target="checkDeployments" class="cursor-pointer">
+                        {{ __('Refresh Status') }}
+                    </flux:button>
+                    <flux:button
+                        variant="filled"
+                        size="sm"
+                        icon="pencil-square"
+                        :href="route('projects.manifests', ['project' => $project->slug, 'path' => 'workloads/web-deployment.yaml'])"
+                        wire:navigate
+                        class="cursor-pointer"
+                    >
+                        {{ __('Edit Deployment') }}
+                    </flux:button>
+                </div>
+
+                <flux:text class="mt-3 font-mono text-2xs text-slate-400">
+                    {{ trim($project->gitops_path, '/') }}/workloads/web-deployment.yaml
+                </flux:text>
             </div>
 
             <flux:callout icon="key" heading="{{ __('No secret values are read') }}">

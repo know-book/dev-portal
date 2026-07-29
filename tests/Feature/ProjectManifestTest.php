@@ -103,9 +103,14 @@ test('team member can view the manifest editor file tree', function () {
     ])->refresh();
 
     $this->actingAs($user)
-        ->get(route('projects.manifests', ['current_team' => $team->slug, 'project' => $project->slug]))
+        ->get(route('projects.manifests', [
+            'current_team' => $team->slug,
+            'project' => $project->slug,
+            'path' => 'workloads/web-deployment.yaml',
+        ]))
         ->assertOk()
         ->assertSee('Manifest Editor')
+        ->assertSee('Editor App / workloads/web-deployment.yaml')
         ->assertSee('kustomization.yaml')
         ->assertSee('workloads')
         ->assertSee('web-deployment.yaml');

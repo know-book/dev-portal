@@ -13,6 +13,11 @@ class ArgoCdApiClient
 {
     public function __construct(private ArgoApplicationDefinitionFactory $definitions) {}
 
+    public function isConfigured(): bool
+    {
+        return filled(config('services.argocd.url')) && filled(config('services.argocd.token'));
+    }
+
     public function status(Project $project, bool $hardRefresh = false): ?ArgoApplicationStatus
     {
         $name = $this->definitions->applicationName($project);
@@ -73,7 +78,7 @@ class ArgoCdApiClient
         $url = rtrim((string) config('services.argocd.url'), '/');
         $token = (string) config('services.argocd.token');
 
-        if ($url === '' || $token === '') {
+        if (! $this->isConfigured()) {
             throw new ArgoCdException('The Argo CD API is not configured for this environment.');
         }
 

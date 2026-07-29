@@ -123,7 +123,9 @@ new #[Layout('layouts.app')] #[Title('Project Details')] class extends Component
                     <span class="size-2.5 rounded-full bg-blue-500"></span>
                     <flux:heading size="md" class="font-medium text-slate-900 dark:text-slate-100">{{ __('ArgoCD GitOps') }}</flux:heading>
                 </div>
-                <flux:badge color="blue" size="sm" class="font-mono text-2xs uppercase">CRD + REST</flux:badge>
+                <flux:badge color="blue" size="sm" class="font-mono text-2xs uppercase">
+                    {{ filled(config('services.argocd.url')) && filled(config('services.argocd.token')) ? 'CRD + REST' : 'Kubernetes CRD' }}
+                </flux:badge>
             </div>
             <flux:text class="mt-2 text-xs text-slate-500 dark:text-slate-400">
                 {{ __('Open live sync and health status') }}

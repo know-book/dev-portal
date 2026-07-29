@@ -154,7 +154,9 @@ new #[Layout('layouts.app')] #[Title('Argo CD Application')] class extends Compo
             <div>
                 <div class="flex items-center gap-2">
                     <flux:heading size="xl" class="font-semibold text-slate-900 dark:text-slate-100">{{ __('Argo CD Application') }}</flux:heading>
-                    <flux:badge color="blue" size="sm" class="font-mono text-2xs uppercase">CRD + REST</flux:badge>
+                    <flux:badge color="blue" size="sm" class="font-mono text-2xs uppercase">
+                        {{ filled(config('services.argocd.url')) && filled(config('services.argocd.token')) ? 'CRD + REST' : 'Kubernetes CRD' }}
+                    </flux:badge>
                 </div>
                 <flux:subheading class="font-mono text-xs text-slate-500 dark:text-slate-400">{{ $this->applicationName }}</flux:subheading>
             </div>

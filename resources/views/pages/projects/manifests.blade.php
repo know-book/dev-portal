@@ -41,7 +41,13 @@ new #[Layout('layouts.app')] #[Title('Project Manifests')] class extends Compone
         abort_if(! $this->project->manifest, 404);
 
         $this->manifest = $this->project->manifest;
-        $this->selectFile((string) array_key_first($this->files()));
+        $files = $this->files();
+        $requestedPath = request()->query('path');
+        $selectedPath = is_string($requestedPath) && array_key_exists($requestedPath, $files)
+            ? $requestedPath
+            : (string) array_key_first($files);
+
+        $this->selectFile($selectedPath);
     }
 
     public function selectFile(string $path): void

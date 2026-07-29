@@ -27,11 +27,32 @@ class ArgoApplicationService implements ArgoApplicationGateway
 
     public function status(Project $project, bool $hardRefresh = false): ?ArgoApplicationStatus
     {
-        return $this->argoCd->status($project, $hardRefresh);
+        if ($this->argoCd->isConfigured()) {
+            return $this->argoCd->status($project, $hardRefresh);
+        }
+
+        $application = $this->kubernetes->status(
+            $this->definitions->applicationName($project),
+            $this->definitions->applicationNamespace(),
+            $hardRefresh,
+        );
+
+        return $application === null
+            ? null
+            : ArgoApplicationStatus::fromApplication($application, $this->definitions->applicationName($project));
     }
 
     public function sync(Project $project): ArgoApplicationStatus
     {
-        return $this->argoCd->sync($project);
+        if ($this->argoCd->isConfigured()) {
+            return $this->argoCd->sync($project);
+        }
+
+        $application = $this->kubernetes->sync(
+            $this->definitions->applicationName($project),
+            $this->definitions->applicationNamespace(),
+        );
+
+        return ArgoApplicationStatus::fromApplication($application, $this->definitions->applicationName($project));
     }
 }

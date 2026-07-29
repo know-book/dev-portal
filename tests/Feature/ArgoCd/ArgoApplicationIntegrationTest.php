@@ -1,5 +1,6 @@
 <?php
 
+use App\Contracts\ArgoApplicationGateway;
 use App\Enums\GitOpsRepositoryMode;
 use App\Models\GitHubInstallation;
 use App\Models\Project;
@@ -125,6 +126,41 @@ test('argocd api reads hard-refreshed status and requests sync', function () {
             && $request['project'] === 'platform'
             && $request['prune'] === true;
     });
+});
+
+test('application gateway checks and syncs through Kubernetes when Argo CD REST is not configured', function () {
+    $project = argoProject();
+
+    config([
+        'services.argocd.url' => null,
+        'services.argocd.token' => null,
+    ]);
+
+    Http::fake(fn () => Http::response([
+        'metadata' => ['name' => $project->team->slug.'-'.$project->slug],
+        'status' => [
+            'sync' => ['status' => 'Synced', 'revision' => 'kubernetes-revision'],
+            'health' => ['status' => 'Healthy'],
+            'operationState' => ['phase' => 'Succeeded'],
+        ],
+    ]));
+
+    $gateway = app(ArgoApplicationGateway::class);
+    $status = $gateway->status($project, hardRefresh: true);
+    $synced = $gateway->sync($project);
+
+    expect($status?->syncStatus)->toBe('Synced')
+        ->and($status?->healthStatus)->toBe('Healthy')
+        ->and($synced->operationPhase)->toBe('Succeeded');
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
+        && str_contains($request->url(), '/apis/argoproj.io/v1alpha1/namespaces/argocd/applications/')
+        && (json_decode($request->body(), true)['metadata']['annotations']['argocd.argoproj.io/refresh'] ?? null) === 'hard'
+        && $request->hasHeader('Authorization', 'Bearer kubernetes-token'));
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
+        && data_get(json_decode($request->body(), true), 'operation.sync.prune') === true
+        && data_get(json_decode($request->body(), true), 'operation.sync.syncOptions.0') === 'CreateNamespace=true');
 });
 
 function argoProject(): Project
