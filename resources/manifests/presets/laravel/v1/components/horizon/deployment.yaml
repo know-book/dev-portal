@@ -22,7 +22,7 @@ spec:
         - name: ghcr-secret
       containers:
         - name: horizon
-          image: {{ image_repository }}:{{ image_tag }}
+          image: {{ image_repository }}/app:{{ image_tag }}
           command: ["php", "artisan", "horizon"]
           envFrom:
             - secretRef:

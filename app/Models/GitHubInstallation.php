@@ -69,6 +69,11 @@ class GitHubInstallation extends Model
         return ($this->permissions['contents'] ?? null) === 'write';
     }
 
+    public function canWriteRepositoryWorkflows(): bool
+    {
+        return ($this->permissions['workflows'] ?? null) === 'write';
+    }
+
     /**
      * Get the attributes that should be cast.
      *

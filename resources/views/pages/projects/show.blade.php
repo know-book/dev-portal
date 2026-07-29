@@ -87,6 +87,9 @@ new #[Layout('layouts.app')] #[Title('Project Details')] class extends Component
         </div>
 
         <div class="flex items-center gap-2">
+            <flux:button variant="filled" icon="cube" size="sm" class="cursor-pointer" :href="route('projects.docker', ['project' => $project->slug])" wire:navigate>
+                {{ __('Docker CI') }}
+            </flux:button>
             <flux:button variant="filled" icon="key" size="sm" class="cursor-pointer" :href="route('projects.secrets', ['project' => $project->slug])" wire:navigate>
                 {{ __('Secrets') }}
             </flux:button>

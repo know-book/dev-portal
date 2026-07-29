@@ -42,6 +42,8 @@ test('project creation initializes a laravel manifest workspace', function () {
             'secrets/external-secret.yaml',
         ])
         ->and($files['workloads/web-deployment.yaml'])->toContain('my-laravel-app')
+        ->and($files['workloads/web-deployment.yaml'])->toContain('ghcr.io/myorg/my-laravel-app/app:latest')
+        ->and($files['workloads/web-deployment.yaml'])->toContain('ghcr.io/myorg/my-laravel-app/nginx:latest')
         ->and($files['secrets/external-secret.yaml'])->toContain('platform-vault');
 
     assertYamlFilesParse($files);

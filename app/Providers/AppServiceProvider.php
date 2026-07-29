@@ -5,8 +5,10 @@ namespace App\Providers;
 use App\Contracts\ArgoApplicationGateway;
 use App\Contracts\GitOpsRepositoryPublisher;
 use App\Contracts\ProjectSecretStore;
+use App\Contracts\SourceRepositoryPublisher;
 use App\Services\ArgoCd\ArgoApplicationService;
 use App\Services\GitHub\GitHubGitOpsRepositoryPublisher;
+use App\Services\GitHub\GitHubSourceRepositoryPublisher;
 use App\Services\Vault\VaultKvV2ProjectSecretStore;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
@@ -23,6 +25,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->bind(ArgoApplicationGateway::class, ArgoApplicationService::class);
         $this->app->bind(GitOpsRepositoryPublisher::class, GitHubGitOpsRepositoryPublisher::class);
+        $this->app->bind(SourceRepositoryPublisher::class, GitHubSourceRepositoryPublisher::class);
         $this->app->bind(ProjectSecretStore::class, VaultKvV2ProjectSecretStore::class);
     }
 

@@ -1,0 +1,13 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+node_modules
+.next
+deploy
+k8s
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

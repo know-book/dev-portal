@@ -19,7 +19,9 @@ commonLabels:
   app.kubernetes.io/part-of: {{ project_slug }}
 
 images:
-  - name: {{ image_repository }}
+  - name: {{ image_repository }}/app
+    newTag: {{ image_tag }}
+  - name: {{ image_repository }}/nginx
     newTag: {{ image_tag }}
 
 configMapGenerator:

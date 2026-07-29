@@ -21,7 +21,7 @@ spec:
         - name: ghcr-secret
       containers:
         - name: app
-          image: {{ image_repository }}:{{ image_tag }}
+          image: {{ image_repository }}/app:{{ image_tag }}
           ports:
             - containerPort: 9000
           envFrom:
@@ -47,7 +47,7 @@ spec:
               mountPath: /usr/local/etc/php-fpm.d/zzzz-access-log.conf
               subPath: php-fpm-access-log.conf
         - name: nginx
-          image: {{ image_repository }}:{{ image_tag }}
+          image: {{ image_repository }}/nginx:{{ image_tag }}
           ports:
             - containerPort: 80
           resources:
