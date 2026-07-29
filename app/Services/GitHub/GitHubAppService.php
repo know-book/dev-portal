@@ -74,6 +74,47 @@ class GitHubAppService
     }
 
     /**
+     * Get the permissions currently granted to a GitHub App installation.
+     *
+     * @return array<string, string>|null
+     */
+    public function getInstallationPermissions(string $installationId): ?array
+    {
+        if (blank(config('services.github.app_id')) || blank(config('services.github.private_key'))) {
+            return null;
+        }
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer '.$this->generateAppJwt(),
+            'Accept' => 'application/vnd.github+json',
+            'X-GitHub-Api-Version' => config('services.github.api_version'),
+        ])
+            ->timeout(10)
+            ->connectTimeout(3)
+            ->get("https://api.github.com/app/installations/{$installationId}");
+
+        if (! $response->successful()) {
+            return null;
+        }
+
+        $permissions = $response->json('permissions');
+
+        if (! is_array($permissions)) {
+            return null;
+        }
+
+        $normalizedPermissions = [];
+
+        foreach ($permissions as $permission => $access) {
+            if (is_string($permission) && is_string($access)) {
+                $normalizedPermissions[$permission] = $access;
+            }
+        }
+
+        return $normalizedPermissions;
+    }
+
+    /**
      * Get accessible repositories for an installation.
      *
      * @return array<int, array{id: int, name: string, full_name: string, default_branch: string, html_url: string, permissions?: array<string, bool>}>

@@ -6,6 +6,7 @@ use App\Enums\ProjectFramework;
 use App\Exceptions\SourceRepositoryException;
 use App\Models\Project;
 use App\Services\Docker\DockerPresetRegistry;
+use App\Services\GitHub\GitHubAppService;
 use Flux\Flux;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -91,6 +92,39 @@ new #[Layout('layouts.app')] #[Title('Docker CI')] class extends Component {
     {
         return collect($this->importRequirements)
             ->every(fn (array $requirement): bool => $requirement['ready']);
+    }
+
+    public function refreshGitHubPermissions(GitHubAppService $gitHub): void
+    {
+        $this->resetErrorBag('githubPermissions');
+
+        $team = Auth::user()->currentTeam;
+
+        if ($this->project->team_id !== $team->id) {
+            abort(403);
+        }
+
+        $installation = $this->project->githubInstallation;
+
+        if (! $installation) {
+            $this->addError('githubPermissions', __('This project is not connected to a GitHub App installation.'));
+
+            return;
+        }
+
+        $permissions = $gitHub->getInstallationPermissions($installation->installation_id);
+
+        if ($permissions === null) {
+            $this->addError('githubPermissions', __('GitHub permissions could not be refreshed. Check the GitHub App credentials and installation access.'));
+
+            return;
+        }
+
+        $installation->update(['permissions' => $permissions]);
+        $this->project->setRelation('githubInstallation', $installation->fresh());
+        unset($this->importRequirements);
+
+        Flux::toast(variant: 'success', text: __('GitHub App permissions refreshed.'));
     }
 
     /**
@@ -268,6 +302,20 @@ new #[Layout('layouts.app')] #[Title('Docker CI')] class extends Component {
                         <flux:button variant="filled" size="sm" icon="cog" :href="route('settings.github')" wire:navigate class="cursor-pointer">
                             {{ __('Open GitHub App Settings') }}
                         </flux:button>
+                        @if ($project->githubInstallation)
+                            <flux:button
+                                variant="filled"
+                                size="sm"
+                                icon="arrow-path"
+                                wire:click="refreshGitHubPermissions"
+                                wire:loading.attr="disabled"
+                                wire:target="refreshGitHubPermissions"
+                                class="cursor-pointer"
+                            >
+                                {{ __('Refresh GitHub Permissions') }}
+                            </flux:button>
+                        @endif
+                        <flux:error name="githubPermissions" />
                     </div>
                 </flux:callout>
             @else

@@ -248,6 +248,47 @@ test('Docker page identifies the missing GitHub App permission', function () {
         ->assertSee('Open GitHub App Settings');
 });
 
+test('Docker page refreshes current permissions from GitHub', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+    $installation = GitHubInstallation::create([
+        'team_id' => $team->id,
+        'installation_id' => '9010',
+        'account_name' => 'acme',
+        'account_type' => 'Organization',
+        'permissions' => ['contents' => 'write', 'workflows' => 'read'],
+    ]);
+    $project = Project::factory()->create([
+        'team_id' => $team->id,
+        'github_installation_id' => $installation->id,
+        'repository' => 'acme/portal',
+    ]);
+
+    Http::fake([
+        'api.github.com/app/installations/9010' => Http::response([
+            'id' => 9010,
+            'permissions' => [
+                'contents' => 'write',
+                'metadata' => 'read',
+                'workflows' => 'write',
+            ],
+        ]),
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::projects.docker', ['project' => $project])
+        ->assertSee('Workflows: Read and write')
+        ->assertSee('Missing')
+        ->call('refreshGitHubPermissions')
+        ->assertHasNoErrors(['githubPermissions'])
+        ->assertSee('Safe repository writes');
+
+    expect($installation->fresh()->permissions)->toMatchArray([
+        'contents' => 'write',
+        'workflows' => 'write',
+    ]);
+});
+
 test('Docker page defaults to the project framework and blocks other teams', function () {
     $user = User::factory()->create();
     $otherUser = User::factory()->create();

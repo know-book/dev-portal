@@ -66,6 +66,35 @@ test('github app service lists installation repositories with pagination', funct
         ->and($repositories[1]['default_branch'])->toBe('trunk');
 });
 
+test('github app service reads current installation permissions', function () {
+    Cache::flush();
+
+    config([
+        'services.github.app_id' => '12345',
+        'services.github.private_key' => 'test-key',
+    ]);
+
+    Http::preventStrayRequests();
+    Http::fake([
+        'api.github.com/app/installations/999888' => Http::response([
+            'id' => 999888,
+            'permissions' => [
+                'contents' => 'write',
+                'metadata' => 'read',
+                'workflows' => 'write',
+            ],
+        ]),
+    ]);
+
+    $permissions = (new GitHubAppService)->getInstallationPermissions('999888');
+
+    expect($permissions)->toBe([
+        'contents' => 'write',
+        'metadata' => 'read',
+        'workflows' => 'write',
+    ]);
+});
+
 test('webhook endpoint accepts push event and dispatches job', function () {
     Queue::fake();
 
