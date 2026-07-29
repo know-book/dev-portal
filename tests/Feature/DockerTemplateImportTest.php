@@ -289,6 +289,90 @@ test('Docker page refreshes current permissions from GitHub', function () {
     ]);
 });
 
+test('Docker page connects an existing project to an installed GitHub App', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+    $installation = GitHubInstallation::create([
+        'team_id' => $team->id,
+        'installation_id' => '9020',
+        'account_name' => 'know-book',
+        'account_type' => 'Organization',
+        'permissions' => ['contents' => 'read', 'workflows' => 'read'],
+    ]);
+    $project = Project::factory()->create([
+        'team_id' => $team->id,
+        'github_installation_id' => null,
+        'repository' => 'know-book/natcp-mini-app',
+        'repository_id' => null,
+    ]);
+
+    Http::fake(function (Request $request) {
+        return match (true) {
+            str_contains($request->url(), '/app/installations/9020/access_tokens') => Http::response(['token' => 'installation-token']),
+            str_contains($request->url(), '/installation/repositories') => Http::response([
+                'repositories' => [[
+                    'id' => 7654321,
+                    'name' => 'natcp-mini-app',
+                    'full_name' => 'know-book/natcp-mini-app',
+                    'default_branch' => 'main',
+                    'html_url' => 'https://github.com/know-book/natcp-mini-app',
+                ]],
+            ]),
+            str_contains($request->url(), '/app/installations/9020') => Http::response([
+                'permissions' => ['contents' => 'write', 'workflows' => 'write'],
+            ]),
+            default => Http::response([], 404),
+        };
+    });
+
+    Livewire::actingAs($user)
+        ->test('pages::projects.docker', ['project' => $project])
+        ->assertSee('Connect Installed GitHub App')
+        ->call('connectGitHubInstallation')
+        ->assertHasNoErrors(['githubPermissions'])
+        ->assertSee('Safe repository writes');
+
+    expect($project->fresh())
+        ->github_installation_id->toBe($installation->id)
+        ->repository_id->toBe('7654321')
+        ->default_branch->toBe('main')
+        ->and($installation->fresh()->permissions)->toMatchArray([
+            'contents' => 'write',
+            'workflows' => 'write',
+        ]);
+});
+
+test('Docker page explains when installed GitHub Apps cannot access the project repository', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+    GitHubInstallation::create([
+        'team_id' => $team->id,
+        'installation_id' => '9030',
+        'account_name' => 'know-book',
+        'account_type' => 'Organization',
+        'permissions' => ['contents' => 'write', 'workflows' => 'write'],
+    ]);
+    $project = Project::factory()->create([
+        'team_id' => $team->id,
+        'github_installation_id' => null,
+        'repository' => 'know-book/natcp-mini-app',
+        'repository_id' => null,
+    ]);
+
+    Http::fake([
+        'api.github.com/app/installations/9030/access_tokens' => Http::response(['token' => 'installation-token']),
+        'api.github.com/installation/repositories*' => Http::response(['repositories' => []]),
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::projects.docker', ['project' => $project])
+        ->call('connectGitHubInstallation')
+        ->assertHasErrors(['githubPermissions'])
+        ->assertSee('No connected GitHub App installation can access know-book/natcp-mini-app.');
+
+    expect($project->fresh()->github_installation_id)->toBeNull();
+});
+
 test('Docker page defaults to the project framework and blocks other teams', function () {
     $user = User::factory()->create();
     $otherUser = User::factory()->create();

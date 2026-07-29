@@ -94,6 +94,55 @@ new #[Layout('layouts.app')] #[Title('Docker CI')] class extends Component {
             ->every(fn (array $requirement): bool => $requirement['ready']);
     }
 
+    public function connectGitHubInstallation(GitHubAppService $gitHub): void
+    {
+        $this->resetErrorBag('githubPermissions');
+
+        $team = Auth::user()->currentTeam;
+
+        if ($this->project->team_id !== $team->id) {
+            abort(403);
+        }
+
+        if (blank($this->project->repository)) {
+            $this->addError('githubPermissions', __('Configure the source repository before connecting a GitHub App installation.'));
+
+            return;
+        }
+
+        foreach ($team->githubInstallations as $installation) {
+            $repository = collect($gitHub->getInstallationRepositories($installation->installation_id))
+                ->first(fn (array $repository): bool => strcasecmp($repository['full_name'], (string) $this->project->repository) === 0);
+
+            if (! is_array($repository)) {
+                continue;
+            }
+
+            $permissions = $gitHub->getInstallationPermissions($installation->installation_id);
+
+            if ($permissions !== null) {
+                $installation->update(['permissions' => $permissions]);
+            }
+
+            $this->project->update([
+                'github_installation_id' => $installation->id,
+                'repository' => $repository['full_name'],
+                'repository_id' => (string) $repository['id'],
+                'default_branch' => $repository['default_branch'] ?: 'main',
+            ]);
+            $this->project = $this->project->fresh()->loadMissing(['githubInstallation', 'team']);
+            unset($this->importRequirements);
+
+            Flux::toast(variant: 'success', text: __('GitHub App installation connected to this project.'));
+
+            return;
+        }
+
+        $this->addError('githubPermissions', __('No connected GitHub App installation can access :repository. Check its repository access in GitHub App Settings.', [
+            'repository' => $this->project->repository,
+        ]));
+    }
+
     public function refreshGitHubPermissions(GitHubAppService $gitHub): void
     {
         $this->resetErrorBag('githubPermissions');
@@ -302,7 +351,19 @@ new #[Layout('layouts.app')] #[Title('Docker CI')] class extends Component {
                         <flux:button variant="filled" size="sm" icon="cog" :href="route('settings.github')" wire:navigate class="cursor-pointer">
                             {{ __('Open GitHub App Settings') }}
                         </flux:button>
-                        @if ($project->githubInstallation)
+                        @if (! $project->githubInstallation)
+                            <flux:button
+                                variant="filled"
+                                size="sm"
+                                icon="link"
+                                wire:click="connectGitHubInstallation"
+                                wire:loading.attr="disabled"
+                                wire:target="connectGitHubInstallation"
+                                class="cursor-pointer"
+                            >
+                                {{ __('Connect Installed GitHub App') }}
+                            </flux:button>
+                        @else
                             <flux:button
                                 variant="filled"
                                 size="sm"
