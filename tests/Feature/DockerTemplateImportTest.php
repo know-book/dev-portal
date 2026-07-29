@@ -66,6 +66,12 @@ test('docker presets render Laravel and Next.js GHCR workflows', function () {
         ])
         ->and($nextFiles['.github/workflows/docker-build.yaml'])
         ->toContain('packages: write', 'IMAGE_REPOSITORY: ghcr.io/acme/next-app', '${{ env.IMAGE_REPOSITORY }}', '&& false')
+        ->and($nextFiles['docker/production/Dockerfile'])
+        ->toContain('elif [ -f package-lock.json ]; then npm ci;', 'else npm install; fi')
+        ->and($laravelFiles['docker/production/nginx/Dockerfile'])
+        ->toContain('elif [ -f package-lock.json ]; then npm ci;', 'else npm install; fi')
+        ->and($laravelFiles['docker/production/php-fpm/Dockerfile'])
+        ->toContain('elif [ -f package-lock.json ]; then npm ci;', 'else npm install; fi')
         ->and($laravelFiles['.github/workflows/docker-build.yaml'])->toContain('&& true')
         ->and($laravelWorkflow['jobs'])->toHaveKeys(['build-and-push', 'update-gitops'])
         ->and($nextWorkflow['jobs'])->toHaveKeys(['build-and-push', 'update-gitops']);

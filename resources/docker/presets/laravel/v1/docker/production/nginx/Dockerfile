@@ -22,7 +22,8 @@ COPY --from=composer-builder /var/www/vendor ./vendor
 RUN corepack enable \
     && if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; \
        elif [ -f yarn.lock ]; then yarn install --immutable; \
-       else npm ci; fi \
+       elif [ -f package-lock.json ]; then npm ci; \
+       else npm install; fi \
     && if [ -f pnpm-lock.yaml ]; then pnpm run build; \
        elif [ -f yarn.lock ]; then yarn build; \
        else npm run build; fi

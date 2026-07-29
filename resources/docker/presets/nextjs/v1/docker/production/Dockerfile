@@ -5,7 +5,8 @@ COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
 RUN corepack enable \
     && if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; \
        elif [ -f yarn.lock ]; then yarn install --immutable; \
-       else npm ci; fi
+       elif [ -f package-lock.json ]; then npm ci; \
+       else npm install; fi
 
 FROM node:22-alpine AS builder
 
