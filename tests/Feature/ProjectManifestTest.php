@@ -44,6 +44,7 @@ test('project creation initializes a laravel manifest workspace', function () {
         ->and($files['workloads/web-deployment.yaml'])->toContain('my-laravel-app')
         ->and($files['workloads/web-deployment.yaml'])->toContain('ghcr.io/myorg/my-laravel-app/app:latest')
         ->and($files['workloads/web-deployment.yaml'])->toContain('ghcr.io/myorg/my-laravel-app/nginx:latest')
+        ->and($files['ingress.yaml'])->toContain('cert-manager.io/cluster-issuer: letsencrypt-cloudflare')
         ->and($files['secrets/external-secret.yaml'])->toContain('platform-vault');
 
     assertYamlFilesParse($files);
@@ -74,9 +75,23 @@ test('nextjs projects initialize with a node web manifest preset', function () {
         ])
         ->and($files['workloads/web-deployment.yaml'])->toContain('containerPort: 3000')
         ->and($files['workloads/web-deployment.yaml'])->toContain('HOSTNAME')
+        ->and($files['ingress.yaml'])->toContain('cert-manager.io/cluster-issuer: letsencrypt-cloudflare')
         ->and($files['kustomization.yaml'])->not->toContain('autoscaling/hpa.yaml');
 
     assertYamlFilesParse($files);
+});
+
+test('generic Docker manifest preset uses the platform ClusterIssuer', function () {
+    $user = User::factory()->create();
+    $project = Project::factory()->create([
+        'team_id' => $user->currentTeam->id,
+        'framework' => ProjectFramework::Other,
+    ]);
+
+    $files = app(ManifestPresetRegistry::class)->filesForProject($project);
+
+    expect($files['ingress.yaml'])
+        ->toContain('cert-manager.io/cluster-issuer: letsencrypt-cloudflare');
 });
 
 test('team member can view the manifest editor file tree', function () {
