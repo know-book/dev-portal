@@ -50,6 +50,7 @@ test('docker presets render Laravel and Next.js GHCR workflows', function () {
 
     expect($laravelFiles)->toHaveKeys([
         '.dockerignore',
+        '.devportal/update-kustomization-tags.py',
         '.github/workflows/docker-build.yaml',
         'docker/production/nginx/Dockerfile',
         'docker/production/nginx/nginx.conf',
@@ -57,15 +58,18 @@ test('docker presets render Laravel and Next.js GHCR workflows', function () {
         'docker/production/php-fpm/entrypoint.sh',
     ])
         ->and($laravelFiles['.github/workflows/docker-build.yaml'])
-        ->toContain('branches:', '- production', 'IMAGE_REPOSITORY: ghcr.io/acme/laravel-app', '${{ env.IMAGE_REPOSITORY }}/${{ matrix.name }}')
+        ->toContain('branches:', '- production', 'IMAGE_REPOSITORY: ghcr.io/acme/laravel-app', '${{ env.IMAGE_REPOSITORY }}/${{ matrix.name }}', 'python3 .devportal/update-kustomization-tags.py')
+        ->not->toContain('kustomize edit set image', 'Install Kustomize')
         ->not->toContain('{{ default_branch }}')
         ->and($nextFiles)->toHaveKeys([
             '.dockerignore',
+            '.devportal/update-kustomization-tags.py',
             '.github/workflows/docker-build.yaml',
             'docker/production/Dockerfile',
         ])
         ->and($nextFiles['.github/workflows/docker-build.yaml'])
-        ->toContain('packages: write', 'IMAGE_REPOSITORY: ghcr.io/acme/next-app', '${{ env.IMAGE_REPOSITORY }}', '&& false')
+        ->toContain('packages: write', 'IMAGE_REPOSITORY: ghcr.io/acme/next-app', '${{ env.IMAGE_REPOSITORY }}', '&& false', 'python3 .devportal/update-kustomization-tags.py')
+        ->not->toContain('kustomize edit set image', 'Install Kustomize')
         ->and($nextFiles['docker/production/Dockerfile'])
         ->toContain('elif [ -f package-lock.json ]; then npm ci;', 'else npm install; fi')
         ->and($laravelFiles['docker/production/nginx/Dockerfile'])

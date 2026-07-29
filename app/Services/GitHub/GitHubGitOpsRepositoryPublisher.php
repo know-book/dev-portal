@@ -7,6 +7,7 @@ use App\Data\GitOpsPublication;
 use App\Data\GitOpsTarget;
 use App\Enums\GitOpsPublishMode;
 use App\Exceptions\GitOpsRepositoryException;
+use App\Services\Manifests\KustomizationImageTagPreserver;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
@@ -15,7 +16,10 @@ use Throwable;
 
 class GitHubGitOpsRepositoryPublisher implements GitOpsRepositoryPublisher
 {
-    public function __construct(private GitHubAppService $gitHub) {}
+    public function __construct(
+        private GitHubAppService $gitHub,
+        private KustomizationImageTagPreserver $imageTags,
+    ) {}
 
     /**
      * @param  array<string, string>  $files
@@ -86,6 +90,7 @@ class GitHubGitOpsRepositoryPublisher implements GitOpsRepositoryPublisher
 
         $this->ensureTargetIsManagedOrEmpty($target, $existingBlobShas);
         $previousManagedFiles = $this->previousManagedFiles($request, $basePath, $target, $existingBlobShas);
+        $files = $this->preserveImageTags($request, $basePath, $target, $files, $existingBlobShas);
         $treeEntries = $this->changedTreeEntries($target, $files, $previousManagedFiles, $existingBlobShas);
 
         if ($treeEntries === []) {
@@ -163,13 +168,7 @@ class GitHubGitOpsRepositoryPublisher implements GitOpsRepositoryPublisher
             return [];
         }
 
-        $blob = $request->get("{$basePath}/git/blobs/{$markerSha}")->throw();
-        $encodedContent = str_replace("\n", '', (string) $blob->json('content'));
-        $decodedContent = base64_decode($encodedContent, true);
-
-        if ($decodedContent === false) {
-            throw new GitOpsRepositoryException('The existing Dev Portal manifest marker is invalid.');
-        }
+        $decodedContent = $this->readBlob($request, $basePath, $markerSha, 'The existing Dev Portal manifest marker is invalid.');
 
         try {
             $marker = json_decode($decodedContent, true, 512, JSON_THROW_ON_ERROR);
@@ -192,6 +191,51 @@ class GitHubGitOpsRepositoryPublisher implements GitOpsRepositoryPublisher
         }
 
         return $paths;
+    }
+
+    /**
+     * @param  array<string, string>  $files
+     * @param  array<string, string>  $existingBlobShas
+     * @return array<string, string>
+     */
+    protected function preserveImageTags(PendingRequest $request, string $basePath, GitOpsTarget $target, array $files, array $existingBlobShas): array
+    {
+        $relativePath = 'kustomization.yaml';
+        $path = $target->filePath($relativePath);
+        $currentSha = $existingBlobShas[$path] ?? null;
+        $generated = $files[$relativePath] ?? null;
+
+        if (! $currentSha || ! is_string($generated) || $currentSha === $this->gitBlobSha($generated)) {
+            return $files;
+        }
+
+        $current = $this->readBlob(
+            $request,
+            $basePath,
+            $currentSha,
+            'The existing kustomization.yaml could not be read safely.',
+        );
+
+        try {
+            $files[$relativePath] = $this->imageTags->preserve($generated, $current);
+        } catch (Throwable $exception) {
+            throw new GitOpsRepositoryException('The existing kustomization.yaml could not be read safely.', previous: $exception);
+        }
+
+        return $files;
+    }
+
+    protected function readBlob(PendingRequest $request, string $basePath, string $sha, string $errorMessage): string
+    {
+        $blob = $request->get("{$basePath}/git/blobs/{$sha}")->throw();
+        $encodedContent = str_replace("\n", '', (string) $blob->json('content'));
+        $decodedContent = base64_decode($encodedContent, true);
+
+        if ($decodedContent === false) {
+            throw new GitOpsRepositoryException($errorMessage);
+        }
+
+        return $decodedContent;
     }
 
     /**

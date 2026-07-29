@@ -73,19 +73,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Kustomize
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-          sudo mv kustomize /usr/local/bin/
-
       - name: Update Kubernetes image tags
         run: |
           NEW_TAG="sha-${GITHUB_SHA::7}"
-          cd "{{ gitops_path }}"
-          kustomize edit set image "${IMAGE_REPOSITORY}/app:${NEW_TAG}"
-          kustomize edit set image "${IMAGE_REPOSITORY}/nginx:${NEW_TAG}"
+          python3 .devportal/update-kustomization-tags.py \
+            "{{ gitops_path }}/kustomization.yaml" \
+            "${NEW_TAG}" \
+            "${IMAGE_REPOSITORY}/app" \
+            "${IMAGE_REPOSITORY}/nginx"
 
       - name: Commit and push
         run: |

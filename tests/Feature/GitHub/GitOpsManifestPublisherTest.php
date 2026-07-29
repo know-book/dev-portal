@@ -112,6 +112,68 @@ test('publisher skips commits when managed files are unchanged', function () {
         && ! str_contains($request->url(), '/access_tokens'));
 });
 
+test('publisher preserves deployed image tags while restoring preset formatting', function () {
+    $currentManifest = "resources:\n- deployment.yaml\nimages:\n- name: ghcr.io/acme/storefront\n  newName: ghcr.io/acme/storefront\n  newTag: sha-1234567\n";
+    $generatedManifest = "resources:\n  - deployment.yaml\nimages:\n  - name: ghcr.io/acme/storefront\n    newTag: latest\n";
+    $marker = "{\"managed_files\":[\"kustomization.yaml\"]}\n";
+
+    Http::fake(function (Request $request) use ($currentManifest, $marker) {
+        $url = $request->url();
+
+        return match (true) {
+            str_contains($url, '/access_tokens') => Http::response(['token' => 'installation-token']),
+            str_contains($url, '/git/ref/heads/main') => Http::response(['object' => ['sha' => 'existing-commit']]),
+            str_contains($url, '/git/commits/existing-commit') => Http::response(['tree' => ['sha' => 'existing-tree']]),
+            str_contains($url, '/git/trees/existing-tree') => Http::response([
+                'tree' => [
+                    ['path' => 'deploy/k8s/kustomization.yaml', 'type' => 'blob', 'sha' => gitBlobSha($currentManifest)],
+                    ['path' => 'deploy/k8s/.devportal.json', 'type' => 'blob', 'sha' => gitBlobSha($marker)],
+                ],
+                'truncated' => false,
+            ]),
+            str_contains($url, '/git/blobs/'.gitBlobSha($currentManifest)) => Http::response([
+                'encoding' => 'base64',
+                'content' => base64_encode($currentManifest),
+            ]),
+            str_contains($url, '/git/blobs/'.gitBlobSha($marker)) => Http::response([
+                'encoding' => 'base64',
+                'content' => base64_encode($marker),
+            ]),
+            $request->method() === 'POST' && str_contains($url, '/git/trees') => Http::response(['sha' => 'new-tree'], 201),
+            $request->method() === 'POST' && str_contains($url, '/git/commits') => Http::response(['sha' => 'new-commit'], 201),
+            $request->method() === 'PATCH' && str_contains($url, '/git/refs/heads/main') => Http::response(['object' => ['sha' => 'new-commit']]),
+            default => Http::response([], 404),
+        };
+    });
+
+    app(GitOpsRepositoryPublisher::class)->publish(
+        gitOpsTarget(),
+        [
+            'kustomization.yaml' => $generatedManifest,
+            '.devportal.json' => $marker,
+        ],
+        'chore(deploy): sync manifests',
+    );
+
+    $publishedManifest = null;
+
+    Http::assertSent(function (Request $request) use (&$publishedManifest): bool {
+        if ($request->method() !== 'POST' || ! str_ends_with($request->url(), '/git/trees')) {
+            return false;
+        }
+
+        $entry = collect($request->data()['tree'])->firstWhere('path', 'deploy/k8s/kustomization.yaml');
+        $publishedManifest = $entry['content'] ?? null;
+
+        return true;
+    });
+
+    expect($publishedManifest)
+        ->toContain("resources:\n  - deployment.yaml")
+        ->toContain('newTag: sha-1234567')
+        ->not->toContain('newName:', 'newTag: latest');
+});
+
 test('publisher refuses to overwrite an unmanaged manifest path', function () {
     Http::fake(function (Request $request) {
         $url = $request->url();
